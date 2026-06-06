@@ -84,7 +84,7 @@ def _setup_simulation_node(context, *args, **kwargs):
         LogInfo(msg=f'  source {ws_setup}'),
         LogInfo(msg='  ros2 run chassis_controller controller_node'),
         LogInfo(msg=''),
-        LogInfo(msg='在 controller 终端输入 w/s/a/d + 回车控制，q + 回车退出'),
+        LogInfo(msg='在 controller 终端: 底盘 wsad  臂 ik肩 jl左右 uo腕  g夹爪  q退出（无需回车）'),
         LogInfo(msg='在本终端按 Q 退出 simulation_node'),
         LogInfo(msg='=' * 60),
         LogInfo(msg=''),

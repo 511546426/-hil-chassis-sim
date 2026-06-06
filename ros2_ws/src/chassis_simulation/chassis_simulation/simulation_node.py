@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""simulation_node —— 模拟底盘 (MuJoCo + ROS 2)
-
-角色: HIL 里的「模拟底盘」
-  - sub  /control_cmd   ← 域控发来的 ChassisCommand (CAN 下行等价)
-  - pub  /chassis_state ← 底盘位姿/速度反馈 (CAN 上行等价)
-  - 内部: 加减速度动力学 + MuJoCo 物理引擎
-"""
+"""simulation_node —— 移动操作臂具身智能体 (MuJoCo + ROS 2)"""
 
 import curses
 import math
@@ -18,16 +12,30 @@ import mujoco
 import mujoco.viewer
 import numpy as np
 import rclpy
-from chassis_common import TIMESTEP, VelocityTracker, apply_velocity_command, load_model
-from chassis_msgs.msg import ChassisCommand
+from chassis_common import (
+    ARENA_HALF,
+    TIMESTEP,
+    EmbodiedTracker,
+    apply_embodied_actuators,
+    initialize_robot_pose,
+    load_model,
+    read_base_pose,
+    read_base_velocity,
+    render_arm_for_display,
+    restore_physics_snapshot,
+    setup_follow_camera,
+)
+from embodied_msgs.msg import EmbodiedCommand
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
+from sensor_msgs.msg import JointState
 
 model = load_model()
 data = mujoco.MjData(model)
 
 _LOG_EVERY_STEPS = 50
 _shutdown_requested = False
+_ARM_JOINT_NAMES = ('arm_shoulder', 'arm_elbow', 'arm_wrist')
 
 
 def _handle_shutdown(signum, frame) -> None:
@@ -55,36 +63,39 @@ class SimulationNode(Node):
 
         self.declare_parameter('max_linear_accel', 0.5)
         self.declare_parameter('max_linear_decel', 1.0)
-        self.declare_parameter('max_angular_accel', 2.0)
-        self.declare_parameter('max_angular_decel', 4.0)
-        self.declare_parameter('emergency_linear_decel', 3.0)
-        self.declare_parameter('emergency_angular_decel', 6.0)
+        self.declare_parameter('max_steer_rate', 1.2)
+        self.declare_parameter('max_joint_rate', 1.5)
 
-        self.tracker = VelocityTracker(
+        self.tracker = EmbodiedTracker(
             max_linear_accel=self.get_parameter('max_linear_accel').value,
             max_linear_decel=self.get_parameter('max_linear_decel').value,
-            max_angular_accel=self.get_parameter('max_angular_accel').value,
-            max_angular_decel=self.get_parameter('max_angular_decel').value,
-            emergency_linear_decel=self.get_parameter('emergency_linear_decel').value,
-            emergency_angular_decel=self.get_parameter('emergency_angular_decel').value,
+            max_steer_rate=self.get_parameter('max_steer_rate').value,
+            max_joint_rate=self.get_parameter('max_joint_rate').value,
         )
 
         self.sub = self.create_subscription(
-            ChassisCommand, '/control_cmd', self.on_control_cmd, 10
+            EmbodiedCommand, '/control_cmd', self.on_control_cmd, 10
         )
-        self.pub = self.create_publisher(Odometry, '/chassis_state', 10)
+        self.pub_odom = self.create_publisher(Odometry, '/chassis_state', 10)
+        self.pub_arm = self.create_publisher(JointState, '/arm_state', 10)
         self.pub_timer = self.create_timer(TIMESTEP, self.publish_state)
 
         self._last_cmd_log = ''
 
-    def on_control_cmd(self, msg: ChassisCommand) -> None:
-        self.tracker.set_target(
+    def on_control_cmd(self, msg: EmbodiedCommand) -> None:
+        self.tracker.set_embodied_target(
             msg.target_linear_x,
-            msg.target_angular_z,
+            msg.target_steering_angle,
+            msg.arm_shoulder,
+            msg.arm_elbow,
+            msg.arm_wrist,
+            msg.gripper,
             msg.emergency_brake,
         )
         summary = (
-            f'tgt[vx={msg.target_linear_x:+.2f} w={msg.target_angular_z:+.2f}]'
+            f'base[vx={msg.target_linear_x:+.2f} steer={math.degrees(msg.target_steering_angle):+.0f}°] '
+            f'arm[{msg.arm_shoulder:+.2f},{msg.arm_elbow:+.2f},{msg.arm_wrist:+.2f}] '
+            f'grip={msg.gripper:.1f}'
             f'{" BRAKE" if msg.emergency_brake else ""}'
         )
         if summary != self._last_cmd_log:
@@ -92,44 +103,54 @@ class SimulationNode(Node):
             self._last_cmd_log = summary
 
     def publish_state(self) -> None:
-        msg = Odometry()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = 'odom'
-        msg.child_frame_id = 'base_link'
+        t = self.tracker
 
-        x, y, yaw = data.qpos[0], data.qpos[1], data.qpos[2]
-        msg.pose.pose.position.x = float(x)
-        msg.pose.pose.position.y = float(y)
-        msg.pose.pose.orientation.z = math.sin(yaw / 2.0)
-        msg.pose.pose.orientation.w = math.cos(yaw / 2.0)
+        odom = Odometry()
+        odom.header.stamp = self.get_clock().now().to_msg()
+        odom.header.frame_id = 'odom'
+        odom.child_frame_id = 'robot_base'
+        x, y, yaw = read_base_pose(model, data)
+        odom.pose.pose.position.x = float(x)
+        odom.pose.pose.position.y = float(y)
+        odom.pose.pose.orientation.z = math.sin(yaw / 2.0)
+        odom.pose.pose.orientation.w = math.cos(yaw / 2.0)
+        odom.twist.twist.linear.x = float(t.vx_actual)
+        odom.twist.twist.linear.y = float(t.steer_actual)
+        odom.twist.twist.angular.z = float(t.omega_actual)
+        self.pub_odom.publish(odom)
 
-        msg.twist.twist.linear.x = float(self.tracker.vx_actual)
-        msg.twist.twist.angular.z = float(self.tracker.omega_actual)
-
-        self.pub.publish(msg)
+        js = JointState()
+        js.header.stamp = odom.header.stamp
+        js.name = list(_ARM_JOINT_NAMES)
+        js.position = [
+            float(t.shoulder_actual),
+            float(t.elbow_actual),
+            float(t.wrist_actual),
+        ]
+        self.pub_arm.publish(js)
 
     def log_status(self, step: int) -> None:
-        x, y, yaw_deg = data.qpos[0], data.qpos[1], np.degrees(data.qpos[2])
-        vx, vy, omega = data.qvel[0], data.qvel[1], data.qvel[2]
+        x, y, yaw = read_base_pose(model, data)
+        yaw_deg = np.degrees(yaw)
         t = self.tracker
         brake = ' BRAKE' if t.emergency_brake else ''
+        blocked = ''
+        bvx, bvy, _ = read_base_velocity(model, data)
+        if abs(t.vx_actual) > 0.15 and np.hypot(bvx, bvy) < 0.05 and data.ncon > 0:
+            blocked = f' [碰撞 ncon={data.ncon}]'
         self.get_logger().info(
             f'state t={step * TIMESTEP:5.1f}s '
-            f'tgt[vx={t.target_vx:+5.2f} w={t.target_omega:+5.2f}]{brake} '
-            f'act[vx={t.vx_actual:+5.2f} w={t.omega_actual:+5.2f}] '
-            f'x={x:+7.3f} y={y:+7.3f} yaw={yaw_deg:+7.1f}° '
-            f'vx={vx:+5.2f} vy={vy:+5.2f} w={omega:+5.2f}'
+            f'base[vx={t.vx_actual:+.2f} steer={math.degrees(t.steer_actual):+.0f}°]{brake} '
+            f'arm[{t.shoulder_actual:+.2f},{t.elbow_actual:+.2f},{t.wrist_actual:+.2f}] '
+            f'grip={t.gripper_actual:.2f} '
+            f'x={x:+6.2f} y={y:+6.2f} yaw={yaw_deg:+5.1f}°{blocked}'
         )
 
 
 def _use_curses() -> bool:
     if os.environ.get('SIMULATION_LOG_ONLY', '').lower() in ('1', 'true', 'yes'):
         return False
-    return (
-        sys.stdin.isatty()
-        and sys.stdout.isatty()
-        and os.environ.get('TERM', '') not in ('', 'dumb')
-    )
+    return sys.stdin.isatty() and sys.stdout.isatty() and os.environ.get('TERM', '') not in ('', 'dumb')
 
 
 def _run_loop(node: SimulationNode, stdscr=None) -> None:
@@ -140,64 +161,61 @@ def _run_loop(node: SimulationNode, stdscr=None) -> None:
     use_panel = stdscr is not None
     running = True
     step = 0
+    t = node.tracker
 
     if use_panel:
         curses.curs_set(0)
         stdscr.nodelay(True)
 
-    node.get_logger().info('simulation_node 已启动（加减速度动力学已启用）')
-    t = node.tracker
-    node.get_logger().info(
-        f'动力学参数: lin_accel={t.max_linear_accel} lin_decel={t.max_linear_decel} '
-        f'ang_accel={t.max_angular_accel} ang_decel={t.max_angular_decel}'
-    )
-    if use_panel:
-        node.get_logger().info('模式: curses 面板 + MuJoCo 3D（本终端按 Q 退出）')
-    else:
-        node.get_logger().info('模式: ROS 日志（ros2 launch 推荐）')
+    node.get_logger().info('simulation_node 已启动 —— 移动操作臂具身智能体')
+    node.get_logger().info('场景含可推动物体 (红箱、蓝箱)')
+    initialize_robot_pose(model, data)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        viewer.cam.distance = 5.0
-        viewer.cam.elevation = -30
+        setup_follow_camera(viewer, model, distance=7.0, elevation=-35.0)
+        node.get_logger().info(f'3D 场地 {ARENA_HALF * 2:.0f}×{ARENA_HALF * 2:.0f} m，相机跟踪 robot_base')
 
         while running and not _shutdown_requested and viewer.is_running() and rclpy.ok():
-            if use_panel:
-                key = stdscr.getch()
-                if key == ord('q'):
-                    running = False
+            if use_panel and stdscr.getch() == ord('q'):
+                running = False
 
-            vx, omega = node.tracker.step(TIMESTEP)
-            apply_velocity_command(data, vx, omega)
+            vx, omega, arm, grip = t.step(TIMESTEP)
+            apply_embodied_actuators(
+                model, data,
+                vx=vx, omega=omega,
+                shoulder=arm['arm_shoulder'],
+                elbow=arm['arm_elbow'],
+                wrist=arm['arm_wrist'],
+                gripper=grip,
+            )
             mujoco.mj_step(model, data)
+            arm_snapshot = render_arm_for_display(
+                model, data,
+                shoulder=arm['arm_shoulder'],
+                elbow=arm['arm_elbow'],
+                wrist=arm['arm_wrist'],
+            )
             rclpy.spin_once(node, timeout_sec=0.0)
 
             if use_panel and step % 5 == 0:
-                x, y, yaw_deg = data.qpos[0], data.qpos[1], np.degrees(data.qpos[2])
+                x, y, yaw_deg = read_base_pose(model, data)
+                yaw_deg = np.degrees(yaw_deg)
                 stdscr.erase()
-                stdscr.addstr(0, 0, f'simulation_node | {step * TIMESTEP:5.1f}s')
-                stdscr.addstr(
-                    1, 0,
-                    f'tgt[vx={t.target_vx:+5.2f} w={t.target_omega:+5.2f}]'
-                    f'{" BRAKE" if t.emergency_brake else ""}',
-                )
-                stdscr.addstr(
-                    2, 0,
-                    f'act[vx={t.vx_actual:+5.2f} w={t.omega_actual:+5.2f}]',
-                )
-                stdscr.addstr(3, 0, f'x={x:+7.3f} y={y:+7.3f} yaw={yaw_deg:+7.1f}°')
-                stdscr.addstr(4, 0, 'pub→/chassis_state  sub←/control_cmd  Q:退出')
+                stdscr.addstr(0, 0, f'具身仿真 | {step * TIMESTEP:5.1f}s')
+                stdscr.addstr(1, 0, f'base vx={t.vx_actual:+.2f} steer={math.degrees(t.steer_actual):+.0f}°')
+                stdscr.addstr(2, 0, f'arm  S={arm["arm_shoulder"]:+.2f} E={arm["arm_elbow"]:+.2f} W={arm["arm_wrist"]:+.2f} G={t.gripper_actual:.2f}')
+                stdscr.addstr(3, 0, f'x={x:+6.2f} y={y:+6.2f} yaw={yaw_deg:+5.1f}°  Q:退出')
                 stdscr.refresh()
 
             if step > 0 and step % _LOG_EVERY_STEPS == 0:
                 node.log_status(step)
 
             viewer.sync()
+            restore_physics_snapshot(data, arm_snapshot)
             step += 1
             if not _interruptible_sleep(TIMESTEP):
                 break
 
-    if _shutdown_requested:
-        node.get_logger().info('收到退出信号 (Ctrl+C)，正在关闭...')
     node.get_logger().info('simulation_node 已退出')
 
 
