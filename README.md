@@ -83,7 +83,4 @@ ros2 run chassis_controller controller_node
 
 ## 下一步：接入「大脑」
 
-在 `controller_node` 之上新增 `agent_node`，用 RL/规划替换键盘：
-- 观测：`/chassis_state` + `/arm_state` + 物体位姿
-- 动作：`EmbodiedCommand`
-- `cartpole_train.py` 可迁移为导航/操作 RL 训练脚本
+详见 [docs/BRAIN_ROADMAP.md](docs/BRAIN_ROADMAP.md)
