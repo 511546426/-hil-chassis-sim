@@ -19,6 +19,9 @@ DEFAULT_SHOULDER = 0.35
 DEFAULT_ELBOW = 0.0
 DEFAULT_WRIST = 0.25
 
+# 场景中可观测/可交互的 freejoint 物体 body 名
+SCENE_OBJECT_BODIES = ('box_red', 'box_blue')
+
 ROBOT_XML = f"""
 <mujoco model="mobile_manipulator">
     <option timestep="{TIMESTEP}" gravity="0 0 -9.81"/>

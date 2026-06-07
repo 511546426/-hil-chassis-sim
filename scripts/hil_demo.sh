@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 一键启动 HIL 演示：simulation_node（后台）+ controller_node（前台遥控）
+# 一键启动 HIL 演示：simulation_node（后台）+ controller_node 或 agent_node
 # 日志写入临时文件，可用 tail -f 分终端查看；退出后自动删除
 set -euo pipefail
 
@@ -10,15 +10,18 @@ WS_SETUP="$WS_DIR/install/setup.bash"
 VENV_PYTHON="$PROJECT_ROOT/ros2_sim_venv/bin/python3"
 SIM_NODE="$WS_DIR/install/chassis_simulation/lib/chassis_simulation/simulation_node"
 CTL_NODE="$WS_DIR/install/chassis_controller/lib/chassis_controller/controller_node"
-BUILD_PACKAGES=(chassis_common chassis_simulation chassis_controller)
+AGENT_NODE="$WS_DIR/install/chassis_agent/lib/chassis_agent/agent_node"
+BUILD_PACKAGES=(embodied_msgs chassis_common chassis_simulation chassis_controller chassis_agent)
 
 FORCE_BUILD=0
 SKIP_BUILD=0
+AGENT_MODE=0
 
 usage() {
   cat <<EOF
 用法: $(basename "$0") [选项]
 
+  --agent      启动 agent_node 替代键盘遥控（自主导航到红箱）
   --build      强制重新编译后再启动
   --no-build   跳过编译检查（install 不存在时直接报错）
   -h, --help   显示此帮助
@@ -29,6 +32,7 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --agent) AGENT_MODE=1; shift ;;
     --build) FORCE_BUILD=1; shift ;;
     --no-build) SKIP_BUILD=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -58,15 +62,29 @@ source_ros() {
 }
 
 needs_build() {
-  [[ ! -f "$WS_SETUP" || ! -f "$SIM_NODE" || ! -f "$CTL_NODE" ]]
+  if [[ ! -f "$WS_SETUP" || ! -f "$SIM_NODE" ]]; then
+    return 0
+  fi
+  if [[ "$AGENT_MODE" -eq 1 ]]; then
+    [[ ! -f "$AGENT_NODE" ]]
+  else
+    [[ ! -f "$CTL_NODE" ]]
+  fi
 }
 
 sources_changed() {
-  local marker="$CTL_NODE"
+  local marker
+  if [[ "$AGENT_MODE" -eq 1 ]]; then
+    marker="$AGENT_NODE"
+    [[ -f "$marker" ]] || marker="$SIM_NODE"
+  else
+    marker="$CTL_NODE"
+  fi
   [[ -f "$marker" ]] || return 0
   local src_root="$WS_DIR/src"
   find "$src_root/chassis_common" "$src_root/chassis_simulation" \
-    "$src_root/chassis_controller" "$src_root/embodied_msgs" \
+    "$src_root/chassis_controller" "$src_root/chassis_agent" \
+    "$src_root/embodied_msgs" \
     -type f \( -name '*.py' -o -name '*.cpp' -o -name '*.msg' -o -name '*.xml' \
       -o -name 'CMakeLists.txt' -o -name 'package.xml' \) \
     -newer "$marker" 2>/dev/null | grep -q .
@@ -97,8 +115,17 @@ elif [[ "$SKIP_BUILD" -eq 0 ]]; then
   fi
 fi
 
-if [[ ! -f "$WS_SETUP" || ! -f "$SIM_NODE" || ! -f "$CTL_NODE" ]]; then
+if [[ ! -f "$WS_SETUP" || ! -f "$SIM_NODE" ]]; then
   echo "错误: 缺少编译产物，请运行:"
+  echo "  $0 --build"
+  exit 1
+fi
+if [[ "$AGENT_MODE" -eq 1 && ! -f "$AGENT_NODE" ]]; then
+  echo "错误: 缺少 agent_node，请运行:"
+  echo "  $0 --build"
+  exit 1
+elif [[ "$AGENT_MODE" -eq 0 && ! -f "$CTL_NODE" ]]; then
+  echo "错误: 缺少 controller_node，请运行:"
   echo "  $0 --build"
   exit 1
 fi
@@ -108,6 +135,7 @@ source_ros
 LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/hil_demo.XXXXXX")"
 SIM_LOG="$LOG_DIR/simulation.log"
 CTL_LOG="$LOG_DIR/controller.log"
+AGENT_LOG="$LOG_DIR/agent.log"
 SIM_PID=""
 
 cleanup() {
@@ -124,20 +152,37 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "============================================================"
-echo "一键启动 HIL 演示"
-echo "  本终端: controller_node 键盘遥控"
-echo "  后台:   simulation_node（MuJoCo 3D 窗口）"
-echo ""
-echo "  底盘: w/s 前进后退  a/d 转向  c 回正  空格 停  b 急停"
-echo "  机械臂: i/k 肩升降  j/l 肘左右  u/o 腕俯仰  g 夹爪  q 退出"
+if [[ "$AGENT_MODE" -eq 1 ]]; then
+  echo "一键启动 HIL 演示（Agent 模式）"
+  echo "  本终端: agent_node 自主导航"
+  echo "  后台:   simulation_node（MuJoCo 3D 窗口）"
+  echo ""
+  echo "  目标: 导航到红箱 (2.5, 0)，到位后切换 ARM_REACH"
+  echo "  按 Ctrl+C 退出"
+else
+  echo "一键启动 HIL 演示"
+  echo "  本终端: controller_node 键盘遥控"
+  echo "  后台:   simulation_node（MuJoCo 3D 窗口）"
+  echo ""
+  echo "  底盘: w/s 前进后退  a/d 转向  c 回正  空格 停  b 急停"
+  echo "  机械臂: i/k 肩升降  j/l 肘左右  u/o 腕俯仰  g 夹爪  q 退出"
+fi
 echo "------------------------------------------------------------"
 echo "日志目录（退出后自动删除）:"
 echo "  ${SIM_LOG}"
-echo "  ${CTL_LOG}"
+if [[ "$AGENT_MODE" -eq 1 ]]; then
+  echo "  ${AGENT_LOG}"
+else
+  echo "  ${CTL_LOG}"
+fi
 echo ""
 echo "另开终端查看日志，例如:"
 echo "  tail -f ${SIM_LOG}"
-echo "  tail -f ${CTL_LOG}"
+if [[ "$AGENT_MODE" -eq 1 ]]; then
+  echo "  tail -f ${AGENT_LOG}"
+else
+  echo "  tail -f ${CTL_LOG}"
+fi
 echo "============================================================"
 echo ""
 
@@ -152,7 +197,12 @@ if ! kill -0 "${SIM_PID}" 2>/dev/null; then
 fi
 
 echo "simulation_node 已启动 (pid ${SIM_PID})"
-echo "controller_node 遥控中...（输出写入 ${CTL_LOG}）"
-echo ""
-
-ros2 run chassis_controller controller_node >>"${CTL_LOG}" 2>&1
+if [[ "$AGENT_MODE" -eq 1 ]]; then
+  echo "agent_node 运行中...（输出写入 ${AGENT_LOG}）"
+  echo ""
+  ros2 run chassis_agent agent_node >>"${AGENT_LOG}" 2>&1
+else
+  echo "controller_node 遥控中...（输出写入 ${CTL_LOG}）"
+  echo ""
+  ros2 run chassis_controller controller_node >>"${CTL_LOG}" 2>&1
+fi

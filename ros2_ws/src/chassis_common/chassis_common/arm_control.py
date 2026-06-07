@@ -4,6 +4,7 @@ from .actuators import (
     PhysicsSnapshot,
     apply_arm_display_pose,
     capture_physics_snapshot,
+    set_arm_position_ctrl,
     zero_arm_actuator_ctrl,
 )
 from .kinematics import apply_velocity_command
@@ -21,7 +22,7 @@ def apply_embodied_actuators(
     wrist: float,
     gripper: float,
 ) -> None:
-    """写入底盘速度指令；机械臂执行器保持关闭，避免与显示用运动学冲突。"""
+    """写入底盘速度指令；机械臂由 apply_arm_display_pose 每帧设置关节角。"""
     del shoulder, elbow, wrist, gripper
     apply_velocity_command(model, data, vx, omega)
     zero_arm_actuator_ctrl(model, data)

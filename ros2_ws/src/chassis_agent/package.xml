@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>chassis_agent</name>
+  <version>0.1.0</version>
+  <description>具身智能体脚本 Agent：导航与臂姿控制</description>
+  <maintainer email="changwei@example.com">changwei</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+  <depend>rclpy</depend>
+  <depend>embodied_msgs</depend>
+  <exec_depend>ament_index_python</exec_depend>
+
+  <export><build_type>ament_python</build_type></export>
+</package>

@@ -16,16 +16,16 @@ from chassis_common import (
     ARENA_HALF,
     TIMESTEP,
     EmbodiedTracker,
-    apply_embodied_actuators,
     initialize_robot_pose,
     load_model,
     read_base_pose,
     read_base_velocity,
-    render_arm_for_display,
-    restore_physics_snapshot,
+    read_object_poses,
     setup_follow_camera,
+    step_embodied_kinematic,
 )
-from embodied_msgs.msg import EmbodiedCommand
+from embodied_msgs.msg import EmbodiedCommand, EmbodiedWorldState
+from geometry_msgs.msg import Pose
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
@@ -78,6 +78,7 @@ class SimulationNode(Node):
         )
         self.pub_odom = self.create_publisher(Odometry, '/chassis_state', 10)
         self.pub_arm = self.create_publisher(JointState, '/arm_state', 10)
+        self.pub_world = self.create_publisher(EmbodiedWorldState, '/world_state', 10)
         self.pub_timer = self.create_timer(TIMESTEP, self.publish_state)
 
         self._last_cmd_log = ''
@@ -129,6 +130,38 @@ class SimulationNode(Node):
         ]
         self.pub_arm.publish(js)
 
+        world = EmbodiedWorldState()
+        world.header.stamp = odom.header.stamp
+        world.header.frame_id = 'odom'
+        world.base_x = float(x)
+        world.base_y = float(y)
+        world.base_yaw = float(yaw)
+        world.base_vx = float(t.vx_actual)
+        world.base_steer = float(t.steer_actual)
+        world.arm_shoulder = float(t.shoulder_actual)
+        world.arm_elbow = float(t.elbow_actual)
+        world.arm_wrist = float(t.wrist_actual)
+        world.gripper = float(t.gripper_actual)
+
+        object_poses = read_object_poses(model, data)
+        world.object_names = list(object_poses.keys())
+        world.object_poses = []
+        for name in world.object_names:
+            ox, oy, oz, ow, oqx, oqy, oqz = object_poses[name]
+            pose = Pose()
+            pose.position.x = ox
+            pose.position.y = oy
+            pose.position.z = oz
+            pose.orientation.w = ow
+            pose.orientation.x = oqx
+            pose.orientation.y = oqy
+            pose.orientation.z = oqz
+            world.object_poses.append(pose)
+
+        world.gripper_touching_object = False
+        world.touched_object_name = ''
+        self.pub_world.publish(world)
+
     def log_status(self, step: int) -> None:
         x, y, yaw = read_base_pose(model, data)
         yaw_deg = np.degrees(yaw)
@@ -179,23 +212,10 @@ def _run_loop(node: SimulationNode, stdscr=None) -> None:
             if use_panel and stdscr.getch() == ord('q'):
                 running = False
 
-            vx, omega, arm, grip = t.step(TIMESTEP)
-            apply_embodied_actuators(
-                model, data,
-                vx=vx, omega=omega,
-                shoulder=arm['arm_shoulder'],
-                elbow=arm['arm_elbow'],
-                wrist=arm['arm_wrist'],
-                gripper=grip,
-            )
-            mujoco.mj_step(model, data)
-            arm_snapshot = render_arm_for_display(
-                model, data,
-                shoulder=arm['arm_shoulder'],
-                elbow=arm['arm_elbow'],
-                wrist=arm['arm_wrist'],
-            )
             rclpy.spin_once(node, timeout_sec=0.0)
+
+            vx, omega, arm, grip = t.step(TIMESTEP)
+            step_embodied_kinematic(model, data, t, TIMESTEP, arm, vx, omega)
 
             if use_panel and step % 5 == 0:
                 x, y, yaw_deg = read_base_pose(model, data)
@@ -211,7 +231,6 @@ def _run_loop(node: SimulationNode, stdscr=None) -> None:
                 node.log_status(step)
 
             viewer.sync()
-            restore_physics_snapshot(data, arm_snapshot)
             step += 1
             if not _interruptible_sleep(TIMESTEP):
                 break

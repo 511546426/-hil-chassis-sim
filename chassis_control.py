@@ -16,13 +16,11 @@ from chassis_common import (  # noqa: E402
     MAX_STEER_ANGLE,
     TIMESTEP,
     EmbodiedTracker,
-    apply_embodied_actuators,
     initialize_robot_pose,
     load_model,
     read_base_pose,
-    render_arm_for_display,
-    restore_physics_snapshot,
     setup_follow_camera,
+    step_embodied_kinematic,
 )
 
 STEER_STEP = 0.08
@@ -85,16 +83,7 @@ def main(stdscr):
                 apply_key(tracker, cmd, k)
 
             vx, omega, arm, grip = tracker.step(TIMESTEP)
-            apply_embodied_actuators(model, data, vx=vx, omega=omega,
-                                     shoulder=arm['arm_shoulder'], elbow=arm['arm_elbow'],
-                                     wrist=arm['arm_wrist'], gripper=grip)
-            mujoco.mj_step(model, data)
-            arm_snapshot = render_arm_for_display(
-                model, data,
-                shoulder=arm['arm_shoulder'],
-                elbow=arm['arm_elbow'],
-                wrist=arm['arm_wrist'],
-            )
+            step_embodied_kinematic(model, data, tracker, TIMESTEP, arm, vx, omega)
 
             if step % 5 == 0:
                 x, y, yaw = read_base_pose(model, data)
@@ -108,7 +97,6 @@ def main(stdscr):
                 stdscr.addstr(4, 0, '底盘:WSAD  臂:IK肩升降 JL肘左右 UO腕  G夹爪  空格停 Q退')
                 stdscr.refresh()
             viewer.sync()
-            restore_physics_snapshot(data, arm_snapshot)
             step += 1
             time.sleep(TIMESTEP)
 

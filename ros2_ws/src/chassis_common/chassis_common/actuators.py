@@ -66,7 +66,7 @@ def apply_arm_display_pose(
     elbow: float,
     wrist: float,
 ) -> None:
-    """仅用于显示：临时设置机械臂关节角并刷新运动学。"""
+    """设置机械臂关节角并刷新运动学（用于显示/运动学锁定）。"""
     for joint_name, value in (
         ('arm_shoulder', _clamp_joint('arm_shoulder', shoulder)),
         ('arm_elbow', _clamp_joint('arm_elbow', elbow)),
@@ -76,4 +76,16 @@ def apply_arm_display_pose(
         if jid < 0:
             continue
         data.qpos[model.jnt_qposadr[jid]] = value
+        data.qvel[model.jnt_dofadr[jid]] = 0.0
     mujoco.mj_forward(model, data)
+
+
+def pin_arm_kinematics(
+    model,
+    data,
+    shoulder: float,
+    elbow: float,
+    wrist: float,
+) -> None:
+    """每帧锁定机械臂姿态，避免重力/integration 干扰底盘动力学。"""
+    apply_arm_display_pose(model, data, shoulder, elbow, wrist)
