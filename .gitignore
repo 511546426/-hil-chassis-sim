@@ -14,8 +14,12 @@ ros2_sim_venv/
 # MuJoCo
 MUJOCO_LOG.TXT
 
-# IDE
+# IDE / 本地工具
 .vscode/
+.clangd
+compile_commands.json
+.claude/
+ros2_ws/.cache/
 
 # SB3 models (二进制)
 *.zip
