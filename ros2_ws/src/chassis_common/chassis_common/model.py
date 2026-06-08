@@ -1,4 +1,8 @@
-"""移动操作臂（具身智能体）MuJoCo 模型 —— 稳定性优先。"""
+"""轮式人形机器人（移动底盘 + 躯干 + 单操作臂）MuJoCo 模型 —— 稳定性优先。
+
+外观为人形：躯干、头部、双臂；控制接口不变（差速底盘 + 右臂 3 关节）。
+左臂为装饰几何，无关节；右臂关节名与执行器与旧 mobile_manipulator 完全兼容。
+"""
 
 TIMESTEP = 0.02
 ARENA_HALF = 15.0
@@ -23,7 +27,7 @@ DEFAULT_WRIST = 0.25
 SCENE_OBJECT_BODIES = ('box_red', 'box_blue')
 
 ROBOT_XML = f"""
-<mujoco model="mobile_manipulator">
+<mujoco model="mobile_humanoid">
     <option timestep="{TIMESTEP}" gravity="0 0 -9.81"/>
 
     <default>
@@ -42,9 +46,11 @@ ROBOT_XML = f"""
                  rgb1="0.88 0.92 0.96" rgb2="0.72 0.78 0.84" width="512" height="512"/>
         <material name="floor" texture="grid" texrepeat="15 15" reflectance="0.08"/>
         <material name="wall" rgba="0.55 0.60 0.68 0.35"/>
-        <material name="base_mat" rgba="0.38 0.40 0.45 1"/>
-        <material name="arm_mat" rgba="0.92 0.55 0.12 1"/>
-        <material name="gripper_mat" rgba="0.25 0.25 0.28 1"/>
+        <material name="base_mat" rgba="0.28 0.30 0.34 1"/>
+        <material name="torso_mat" rgba="0.42 0.48 0.58 1"/>
+        <material name="skin" rgba="0.86 0.74 0.64 1"/>
+        <material name="arm_mat" rgba="0.86 0.74 0.64 1"/>
+        <material name="gripper_mat" rgba="0.35 0.35 0.38 1"/>
         <material name="pillar" rgba="0.30 0.62 0.42 1"/>
     </asset>
 
@@ -76,42 +82,74 @@ ROBOT_XML = f"""
             <geom name="box_blue_geom" type="box" size="0.11 0.11 0.11" mass="0.8" rgba="0.25 0.45 0.85 1"/>
         </body>
 
-        <!-- 移动操作臂 -->
-        <body name="robot_base" pos="0 0 0.12">
+        <!-- 轮式人形：差速底盘 + 躯干/头 + 左臂装饰 + 右臂操作 -->
+        <body name="robot_base" pos="0 0 0.10">
             <joint name="slide_x" type="slide" axis="1 0 0"/>
             <joint name="slide_y" type="slide" axis="0 1 0"/>
             <joint name="hinge_z" type="hinge" axis="0 0 1"/>
 
-            <geom name="base_collision" type="cylinder" size="0.20 0.08" material="base_mat"/>
-            <geom name="mast" type="cylinder" pos="0 0 0.09" size="0.04 0.05"
-                  rgba="0.30 0.32 0.36 1" contype="0" conaffinity="0"/>
+            <geom name="base_collision" type="cylinder" size="0.20 0.06" material="base_mat"/>
+            <geom name="wheel_fl" type="cylinder" pos="0.14 0.16 0.0" size="0.04 0.02"
+                  euler="90 0 0" rgba="0.15 0.15 0.15 1" contype="0" conaffinity="0"/>
+            <geom name="wheel_fr" type="cylinder" pos="0.14 -0.16 0.0" size="0.04 0.02"
+                  euler="90 0 0" rgba="0.15 0.15 0.15 1" contype="0" conaffinity="0"/>
+            <geom name="wheel_bl" type="cylinder" pos="-0.14 0.16 0.0" size="0.04 0.02"
+                  euler="90 0 0" rgba="0.15 0.15 0.15 1" contype="0" conaffinity="0"/>
+            <geom name="wheel_br" type="cylinder" pos="-0.14 -0.16 0.0" size="0.04 0.02"
+                  euler="90 0 0" rgba="0.15 0.15 0.15 1" contype="0" conaffinity="0"/>
 
-            <body name="arm_shoulder_link" pos="0 0 0.14" gravcomp="1">
-                <joint name="arm_shoulder" type="hinge" axis="0 1 0" range="-1.0 1.0"/>
-                <geom name="link1" type="capsule" fromto="0 0 0 0.20 0 0" size="0.04"
-                      material="arm_mat" contype="0" conaffinity="0"/>
-                <geom name="link1_col" type="capsule" fromto="0 0 0 0.20 0 0" size="0.035"
-                      contype="0" conaffinity="0"/>
+            <body name="torso" pos="0 0 0.02">
+                <geom name="pelvis" type="capsule" fromto="0 0 0 0 0 0.08" size="0.09"
+                      material="torso_mat" contype="0" conaffinity="0"/>
+                <geom name="torso" type="capsule" fromto="0 0 0.08 0 0 0.28" size="0.085"
+                      material="torso_mat" contype="0" conaffinity="0"/>
+                <geom name="head" type="sphere" pos="0 0 0.36" size="0.075"
+                      material="skin" contype="0" conaffinity="0"/>
+                <geom name="eye_l" type="sphere" pos="0.05 0.03 0.38" size="0.012"
+                      rgba="0.12 0.14 0.18 1" contype="0" conaffinity="0"/>
+                <geom name="eye_r" type="sphere" pos="0.05 -0.03 0.38" size="0.012"
+                      rgba="0.12 0.14 0.18 1" contype="0" conaffinity="0"/>
 
-                <body name="arm_elbow_link" pos="0.20 0 0" gravcomp="1">
-                    <joint name="arm_elbow" type="hinge" axis="0 0 1" range="-1.2 1.2"/>
-                    <geom name="link2" type="capsule" fromto="0 0 0 0.16 0 0" size="0.035"
+                <!-- 左臂：装饰，无关节 -->
+                <body name="left_arm_upper" pos="0 0.15 0.22">
+                    <geom name="left_upper" type="capsule" fromto="0 0 0 0.05 0.12 -0.04"
+                          size="0.034" material="skin" contype="0" conaffinity="0"/>
+                    <body name="left_arm_lower" pos="0.05 0.12 -0.04">
+                        <geom name="left_forearm" type="capsule" fromto="0 0 0 0.14 0.02 0"
+                              size="0.028" material="skin" contype="0" conaffinity="0"/>
+                        <geom name="left_hand" type="box" pos="0.15 0.02 0" size="0.02 0.035 0.025"
+                              material="skin" contype="0" conaffinity="0"/>
+                    </body>
+                </body>
+
+                <!-- 右臂：可操作（关节名/执行器与旧模型一致） -->
+                <body name="arm_shoulder_link" pos="0 -0.15 0.22" gravcomp="1">
+                    <joint name="arm_shoulder" type="hinge" axis="0 1 0" range="-1.0 1.0"/>
+                    <geom name="link1" type="capsule" fromto="0 0 0 0.20 0 0" size="0.04"
                           material="arm_mat" contype="0" conaffinity="0"/>
-                    <geom name="link2_col" type="capsule" fromto="0 0 0 0.16 0 0" size="0.03"
+                    <geom name="link1_col" type="capsule" fromto="0 0 0 0.20 0 0" size="0.035"
                           contype="0" conaffinity="0"/>
 
-                    <body name="arm_wrist_link" pos="0.16 0 0" gravcomp="1">
-                        <joint name="arm_wrist" type="hinge" axis="0 1 0" range="-1.2 1.2"/>
-                        <geom name="link3" type="capsule" fromto="0 0 0 0.10 0 0" size="0.03"
+                    <body name="arm_elbow_link" pos="0.20 0 0" gravcomp="1">
+                        <joint name="arm_elbow" type="hinge" axis="0 0 1" range="-1.2 1.2"/>
+                        <geom name="link2" type="capsule" fromto="0 0 0 0.16 0 0" size="0.035"
                               material="arm_mat" contype="0" conaffinity="0"/>
+                        <geom name="link2_col" type="capsule" fromto="0 0 0 0.16 0 0" size="0.03"
+                              contype="0" conaffinity="0"/>
 
-                        <body name="gripper" pos="0.10 0 0" gravcomp="1">
-                            <geom name="palm" type="box" size="0.02 0.04 0.02"
-                                  material="gripper_mat" contype="0" conaffinity="0"/>
-                            <geom name="finger_l" type="box" pos="0.02 0.035 0" size="0.015 0.01 0.025"
-                                  material="gripper_mat" contype="0" conaffinity="0"/>
-                            <geom name="finger_r" type="box" pos="0.02 -0.035 0" size="0.015 0.01 0.025"
-                                  material="gripper_mat" contype="0" conaffinity="0"/>
+                        <body name="arm_wrist_link" pos="0.16 0 0" gravcomp="1">
+                            <joint name="arm_wrist" type="hinge" axis="0 1 0" range="-1.2 1.2"/>
+                            <geom name="link3" type="capsule" fromto="0 0 0 0.10 0 0" size="0.03"
+                                  material="arm_mat" contype="0" conaffinity="0"/>
+
+                            <body name="gripper" pos="0.10 0 0" gravcomp="1">
+                                <geom name="palm" type="box" size="0.02 0.04 0.02"
+                                      material="gripper_mat" contype="0" conaffinity="0"/>
+                                <geom name="finger_l" type="box" pos="0.02 0.035 0" size="0.015 0.01 0.025"
+                                      material="gripper_mat" contype="0" conaffinity="0"/>
+                                <geom name="finger_r" type="box" pos="0.02 -0.035 0" size="0.015 0.01 0.025"
+                                      material="gripper_mat" contype="0" conaffinity="0"/>
+                            </body>
                         </body>
                     </body>
                 </body>
@@ -119,8 +157,15 @@ ROBOT_XML = f"""
         </body>
     </worldbody>
 
-    <!-- 禁用底盘与机械臂自碰撞 -->
+    <!-- 禁用人形躯干/底盘与机械臂自碰撞 -->
     <contact>
+        <exclude body1="robot_base" body2="torso"/>
+        <exclude body1="torso" body2="arm_shoulder_link"/>
+        <exclude body1="torso" body2="arm_elbow_link"/>
+        <exclude body1="torso" body2="arm_wrist_link"/>
+        <exclude body1="torso" body2="gripper"/>
+        <exclude body1="torso" body2="left_arm_upper"/>
+        <exclude body1="torso" body2="left_arm_lower"/>
         <exclude body1="robot_base" body2="arm_shoulder_link"/>
         <exclude body1="robot_base" body2="arm_elbow_link"/>
         <exclude body1="robot_base" body2="arm_wrist_link"/>

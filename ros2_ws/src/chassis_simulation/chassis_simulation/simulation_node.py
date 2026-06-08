@@ -205,7 +205,7 @@ def _run_loop(node: SimulationNode, stdscr=None) -> None:
     initialize_robot_pose(model, data)
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        setup_follow_camera(viewer, model, distance=7.0, elevation=-35.0)
+        setup_follow_camera(viewer, model, distance=8.5, elevation=-30.0)
         node.get_logger().info(f'3D 场地 {ARENA_HALF * 2:.0f}×{ARENA_HALF * 2:.0f} m，相机跟踪 robot_base')
 
         while running and not _shutdown_requested and viewer.is_running() and rclpy.ok():

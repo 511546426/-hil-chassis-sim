@@ -15,6 +15,7 @@ add_library(${PROJECT_NAME} SHARED
   src/navigate_skill.cpp
   src/manipulate_skill.cpp
   src/skill_executor.cpp
+  src/push_red_box_fsm.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -63,6 +64,14 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_skills ${PROJECT_NAME})
   target_include_directories(test_skills PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  )
+
+  ament_add_gtest(test_push_red_box_fsm
+    test/test_push_red_box_fsm.cpp
+  )
+  target_link_libraries(test_push_red_box_fsm ${PROJECT_NAME})
+  target_include_directories(test_push_red_box_fsm PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   )
 endif()
