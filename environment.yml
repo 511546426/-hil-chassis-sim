@@ -1,0 +1,13 @@
+# 统一具身智能开发环境（conda embodied）
+# 创建: conda env create -f environment.yml
+# 更新: conda env update -f environment.yml --prune
+name: embodied
+channels:
+  - conda-forge
+dependencies:
+  - python=3.14
+  - pip
+  - pip:
+      - -r requirements.txt
+      - colcon-common-extensions>=0.3.0
+      - lark>=1.2

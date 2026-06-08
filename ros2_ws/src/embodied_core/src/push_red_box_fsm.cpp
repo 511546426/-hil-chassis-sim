@@ -178,11 +178,9 @@ SkillOutput PushRedBoxFSM::tick(
           world,
           ManipulateSkill::Preset::Reach,
           ManipulateSkill::GripperAction::Close);
-      // M3：仅夹爪到位；M4 增加 world.gripper_touching_object
-      if (ManipulateSkill::gripper_at(world, 1.0, config_.gripper_tol)) {
-        transition(
-            PushRedBoxPhase::BackUp,
-            "gripper closed (contact pending M4)");
+      if (ManipulateSkill::gripper_at(world, 1.0, config_.gripper_tol)
+          && world.gripper_touching_object) {
+        transition(PushRedBoxPhase::BackUp, "gripper closed with contact");
         last_output_ = executor.step_navigate_to_box_red(world, true);
       } else if (phase_time_ > config_.phase_timeout_gripper) {
         transition(PushRedBoxPhase::Failed, "close gripper timeout");

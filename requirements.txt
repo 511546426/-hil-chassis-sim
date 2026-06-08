@@ -7,5 +7,7 @@ glfw>=2.5
 gymnasium>=0.29
 stable-baselines3>=2.0
 
-# ROS 2 Python 节点额外依赖（在 ros2_sim_venv 中安装）
+# ROS 2 Python 节点（conda embodied 环境）
 # rclpy 由 ROS 2 系统包提供，需 source /opt/ros/lyrical/setup.bash
+# lark 为 rclpy/rosidl 在 conda 环境下的额外依赖
+lark>=1.2

@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import math
+
 import mujoco
 
 from .actuators import set_arm_position_ctrl
 from .model import DEFAULT_ELBOW, DEFAULT_SHOULDER, DEFAULT_WRIST, SCENE_OBJECT_BODIES
 
 ObjectPose = tuple[float, float, float, float, float, float, float]
+
+# M4：夹爪与物体几何接触判据（夹爪无碰撞体，用距离 heuristic）
+GRIP_CONTACT_DIST = 0.22
+GRIP_CONTACT_Z_TOL = 0.15
 
 
 def _joint_qpos(model, data, name: str) -> float:
@@ -46,6 +52,45 @@ def read_arm_joint_positions(model, data) -> tuple[float, float, float]:
         _joint_qpos(model, data, 'arm_elbow'),
         _joint_qpos(model, data, 'arm_wrist'),
     )
+
+
+def read_gripper_position(model, data) -> tuple[float, float, float]:
+    """返回 gripper body 世界坐标 (x, y, z)。"""
+    bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, 'gripper')
+    if bid < 0:
+        return (0.0, 0.0, 0.0)
+    pos = data.xpos[bid]
+    return float(pos[0]), float(pos[1]), float(pos[2])
+
+
+def detect_gripper_contact(
+    model,
+    data,
+    *,
+    object_names: tuple[str, ...] = SCENE_OBJECT_BODIES,
+    contact_dist: float = GRIP_CONTACT_DIST,
+    z_tol: float = GRIP_CONTACT_Z_TOL,
+) -> tuple[bool, str]:
+    """检测夹爪是否与场景物体几何接触。
+
+    返回 (touching, object_name)。无接触时 object_name 为空串。
+    条件：水平距离 < contact_dist 且 |dz| < z_tol。
+    """
+    gx, gy, gz = read_gripper_position(model, data)
+    object_poses = read_object_poses(model, data, body_names=object_names)
+
+    best_name = ''
+    best_horiz = float('inf')
+    for name, (ox, oy, oz, *_rest) in object_poses.items():
+        horiz = math.hypot(gx - ox, gy - oy)
+        dz = abs(gz - oz)
+        if horiz < contact_dist and dz < z_tol and horiz < best_horiz:
+            best_horiz = horiz
+            best_name = name
+
+    if best_name:
+        return True, best_name
+    return False, ''
 
 
 def read_object_poses(

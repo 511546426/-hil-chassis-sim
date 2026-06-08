@@ -7,7 +7,8 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ROS_SETUP="/opt/ros/lyrical/setup.bash"
 WS_DIR="$PROJECT_ROOT/ros2_ws"
 WS_SETUP="$WS_DIR/install/setup.bash"
-VENV_PYTHON="$PROJECT_ROOT/ros2_sim_venv/bin/python3"
+EMBODIED_PYTHON_DEFAULT="${HOME}/miniconda3/envs/embodied/bin/python"
+PYTHON="${CHASSIS_PYTHON:-$EMBODIED_PYTHON_DEFAULT}"
 SIM_NODE="$WS_DIR/install/chassis_simulation/lib/chassis_simulation/simulation_node"
 CTL_NODE="$WS_DIR/install/chassis_controller/lib/chassis_controller/controller_node"
 AGENT_NODE="$WS_DIR/install/chassis_agent/lib/chassis_agent/agent_node"
@@ -54,8 +55,28 @@ if [[ ! -f "$ROS_SETUP" ]]; then
   echo "错误: 未找到 $ROS_SETUP"
   exit 1
 fi
-if [[ ! -x "$VENV_PYTHON" ]]; then
-  echo "错误: 未找到 $VENV_PYTHON，请先创建 ros2_sim_venv"
+if [[ ! -x "$PYTHON" ]]; then
+  echo "错误: 未找到 $PYTHON"
+  echo "请先创建统一环境: conda env create -f environment.yml"
+  echo "或: source scripts/env.sh"
+  exit 1
+fi
+
+_running_hil_pids() {
+  # 只匹配真实节点进程，避免误匹配 shell 命令行里的路径字符串
+  pgrep -f "${PYTHON} ${SIM_NODE}" 2>/dev/null || true
+  pgrep -f "${AGENT_CPP_NODE}" 2>/dev/null || true
+  pgrep -f "${AGENT_NODE}" 2>/dev/null || true
+  pgrep -f "${CTL_NODE}" 2>/dev/null || true
+}
+
+_existing_hil="$(_running_hil_pids | sort -u | tr '\n' ' ')"
+if [[ -n "${_existing_hil// }" ]]; then
+  echo "错误: 已有 HIL 进程在运行（simulation_node 或 agent_node）"
+  echo "请先结束旧进程，例如:"
+  echo "  pkill -9 -f '${WS_DIR}/install/chassis_simulation/lib/chassis_simulation/simulation_node'"
+  echo "  pkill -9 -f '${WS_DIR}/install/chassis_agent_cpp/lib/chassis_agent_cpp/agent_node'"
+  ps -fp ${_existing_hil} 2>/dev/null || true
   exit 1
 fi
 
@@ -68,7 +89,8 @@ source_ros() {
     source "$WS_SETUP"
   fi
   set -u
-  export PATH="$PROJECT_ROOT/ros2_sim_venv/bin:$PATH"
+  export PATH="$(dirname "$PYTHON"):$PATH"
+  export CHASSIS_PYTHON="$PYTHON"
 }
 
 needs_build() {
@@ -128,8 +150,7 @@ build_workspace() {
   source_ros
   cd "$WS_DIR"
   colcon build --symlink-install \
-    --packages-select "${packages[@]}" \
-    --allow-overriding chassis_common
+    --packages-select "${packages[@]}"
   source_ros
   echo ""
 }
@@ -228,7 +249,7 @@ fi
 echo "============================================================"
 echo ""
 
-SIMULATION_LOG_ONLY=1 "$VENV_PYTHON" "$SIM_NODE" </dev/null >>"${SIM_LOG}" 2>&1 &
+SIMULATION_LOG_ONLY=1 "$PYTHON" "$SIM_NODE" </dev/null >>"${SIM_LOG}" 2>&1 &
 SIM_PID=$!
 
 sleep 2

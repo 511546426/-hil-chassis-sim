@@ -16,6 +16,7 @@ from chassis_common import (
     ARENA_HALF,
     TIMESTEP,
     EmbodiedTracker,
+    detect_gripper_contact,
     initialize_robot_pose,
     load_model,
     read_base_pose,
@@ -158,8 +159,9 @@ class SimulationNode(Node):
             pose.orientation.z = oqz
             world.object_poses.append(pose)
 
-        world.gripper_touching_object = False
-        world.touched_object_name = ''
+        touching, touched_name = detect_gripper_contact(model, data)
+        world.gripper_touching_object = touching
+        world.touched_object_name = touched_name if touching else ''
         self.pub_world.publish(world)
 
     def log_status(self, step: int) -> None:
@@ -171,12 +173,15 @@ class SimulationNode(Node):
         bvx, bvy, _ = read_base_velocity(model, data)
         if abs(t.vx_actual) > 0.15 and np.hypot(bvx, bvy) < 0.05 and data.ncon > 0:
             blocked = f' [碰撞 ncon={data.ncon}]'
+        touching, touched = detect_gripper_contact(model, data)
+        contact = f' contact={touched}' if touching else ''
+
         self.get_logger().info(
             f'state t={step * TIMESTEP:5.1f}s '
             f'base[vx={t.vx_actual:+.2f} steer={math.degrees(t.steer_actual):+.0f}°]{brake} '
             f'arm[{t.shoulder_actual:+.2f},{t.elbow_actual:+.2f},{t.wrist_actual:+.2f}] '
             f'grip={t.gripper_actual:.2f} '
-            f'x={x:+6.2f} y={y:+6.2f} yaw={yaw_deg:+5.1f}°{blocked}'
+            f'x={x:+6.2f} y={y:+6.2f} yaw={yaw_deg:+5.1f}°{contact}{blocked}'
         )
 
 
@@ -208,7 +213,9 @@ def _run_loop(node: SimulationNode, stdscr=None) -> None:
         setup_follow_camera(viewer, model, distance=8.5, elevation=-30.0)
         node.get_logger().info(f'3D 场地 {ARENA_HALF * 2:.0f}×{ARENA_HALF * 2:.0f} m，相机跟踪 robot_base')
 
+        next_frame = time.monotonic()
         while running and not _shutdown_requested and viewer.is_running() and rclpy.ok():
+            frame_start = time.monotonic()
             if use_panel and stdscr.getch() == ord('q'):
                 running = False
 
@@ -232,8 +239,18 @@ def _run_loop(node: SimulationNode, stdscr=None) -> None:
 
             viewer.sync()
             step += 1
-            if not _interruptible_sleep(TIMESTEP):
-                break
+
+            # 按墙钟对齐仿真步长：渲染耗时不再额外叠一层 sleep
+            next_frame += TIMESTEP
+            sleep_for = next_frame - time.monotonic()
+            if sleep_for > 0.0:
+                if not _interruptible_sleep(sleep_for):
+                    break
+            elif time.monotonic() - frame_start > TIMESTEP * 2.0 and step % _LOG_EVERY_STEPS == 0:
+                node.get_logger().warning(
+                    f'仿真帧耗时 {1000.0 * (time.monotonic() - frame_start):.0f} ms，'
+                    f'超过预算 {TIMESTEP * 1000:.0f} ms，画面可能掉帧'
+                )
 
     node.get_logger().info('simulation_node 已退出')
 

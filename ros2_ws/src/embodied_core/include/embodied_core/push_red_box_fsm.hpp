@@ -20,7 +20,7 @@ enum class PushRedBoxPhase : uint8_t {
   Failed,
 };
 
-/// 推红箱任务状态机（M3：假接触；M4/M5/M6 逐步增强判据）
+/// 推红箱任务状态机（M4：CloseGripper 需夹爪闭合且 gripper_touching_object）
 class PushRedBoxFSM {
  public:
   struct Config {

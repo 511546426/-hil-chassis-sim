@@ -17,22 +17,32 @@ controller_node (遥控/未来agent)     simulation_node (身体仿真)
 
 ## 环境准备
 
+本项目使用 **单一 conda 环境 `embodied`**（Python 3.14，仿真 + ROS + RL）。
+
 ```bash
-source /opt/ros/lyrical/setup.bash
-python3 -m venv --copies --system-site-packages ros2_sim_venv
-source ros2_sim_venv/bin/activate && pip install -r requirements.txt
+cd ~/changwei/project
+conda env create -f environment.yml    # 首次创建
+source scripts/env.sh                  # 每次开终端
 ```
+
+验证：
+
+```bash
+python --version                       # 3.14.x
+python -c "import rclpy, mujoco, gymnasium"
+ros2 --help
+```
+
+> 旧版 `ros2_sim_venv` 已弃用，可手动删除：`rm -rf ros2_sim_venv`
 
 ## 编译
 
 首次使用或全量编译时：
 
 ```bash
-source /opt/ros/lyrical/setup.bash
-export PATH="/home/changwei/changwei/project/ros2_sim_venv/bin:$PATH"
+source scripts/env.sh
 cd ros2_ws
 colcon build --symlink-install
-source install/setup.bash
 ```
 
 ## 运行
@@ -53,6 +63,9 @@ source install/setup.bash
 
 **手动分终端启动：**
 ```bash
+# 两个终端均先执行
+source scripts/env.sh
+
 # 终端 1
 ros2 launch chassis_simulation hil_demo.launch.py
 

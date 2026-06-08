@@ -399,7 +399,7 @@ scripts/run_embodied_core_tests.sh         # 一键 gtest + Markdown 报告
 
 ```bash
 source /opt/ros/lyrical/setup.bash
-source ros2_sim_venv/bin/activate
+source scripts/env.sh
 cd ros2_ws && colcon build --symlink-install
 ```
 

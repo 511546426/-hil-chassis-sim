@@ -1,10 +1,14 @@
 from .arm_control import apply_embodied_actuators, render_arm_for_display
 from .actuators import restore_physics_snapshot
 from .state_reader import (
+    GRIP_CONTACT_DIST,
+    GRIP_CONTACT_Z_TOL,
+    detect_gripper_contact,
     initialize_robot_pose,
     read_arm_joint_positions,
     read_base_pose,
     read_base_velocity,
+    read_gripper_position,
     read_object_poses,
 )
 from .dynamics import CarTracker, EmbodiedTracker, VelocityTracker, ramp_toward
@@ -47,6 +51,10 @@ __all__ = [
     'read_base_pose',
     'read_base_velocity',
     'read_object_poses',
+    'read_gripper_position',
+    'detect_gripper_contact',
+    'GRIP_CONTACT_DIST',
+    'GRIP_CONTACT_Z_TOL',
     'initialize_robot_pose',
     'steering_to_omega',
     'ramp_toward',

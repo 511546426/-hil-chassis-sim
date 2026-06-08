@@ -3,8 +3,11 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ROS_SETUP="/opt/ros/lyrical/setup.bash"
 WS_DIR="$PROJECT_ROOT/ros2_ws"
+
+# 使用统一 embodied 环境（含 ROS + colcon）
+# shellcheck disable=SC1091
+source "$PROJECT_ROOT/scripts/env.sh"
 PKG="embodied_core"
 RESULTS_DIR="$WS_DIR/build/${PKG}/test_results"
 
@@ -31,16 +34,6 @@ while [[ $# -gt 0 ]]; do
     *) echo "未知选项: $1"; usage; exit 1 ;;
   esac
 done
-
-if [[ ! -f "$ROS_SETUP" ]]; then
-  echo "错误: 未找到 $ROS_SETUP"
-  exit 1
-fi
-
-set +u
-# shellcheck disable=SC1090
-source "$ROS_SETUP"
-set -u
 
 cd "$WS_DIR"
 

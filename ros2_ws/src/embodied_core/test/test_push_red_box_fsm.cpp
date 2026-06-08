@@ -4,7 +4,7 @@
 
 using namespace embodied_core;
 
-static WorldView world_at_box(double gripper = 0.0) {
+static WorldView world_at_box(double gripper = 0.0, bool touching = false) {
   WorldView w;
   w.base_x = 2.12;
   w.base_y = 0.0;
@@ -13,6 +13,8 @@ static WorldView world_at_box(double gripper = 0.0) {
   w.arm_elbow = kArmReach.elbow;
   w.arm_wrist = kArmReach.wrist;
   w.gripper = gripper;
+  w.gripper_touching_object = touching;
+  w.touched_object_name = touching ? "box_red" : "";
   w.objects.push_back(ObjectPose{"box_red", 2.5, 0.0, 0.18});
   return w;
 }
@@ -63,10 +65,21 @@ TEST(PushRedBoxFSMTest, reach_to_close_when_arm_ready) {
   EXPECT_NEAR(out.gripper, 1.0, 1e-9);
 }
 
-TEST(PushRedBoxFSMTest, close_to_back_up_when_gripper_closed) {
+TEST(PushRedBoxFSMTest, close_without_contact_stays_in_close_gripper) {
   PushRedBoxFSM fsm;
   SkillExecutor exec = make_executor();
-  WorldView w = world_at_box(1.0);
+  WorldView w = world_at_box(1.0, false);
+
+  for (int i = 0; i < 4; ++i) {
+    fsm.tick(w, exec, 0.02);
+  }
+  EXPECT_EQ(fsm.phase(), PushRedBoxPhase::CloseGripper);
+}
+
+TEST(PushRedBoxFSMTest, close_to_back_up_when_gripper_closed_and_touching) {
+  PushRedBoxFSM fsm;
+  SkillExecutor exec = make_executor();
+  WorldView w = world_at_box(1.0, true);
 
   fsm.tick(w, exec, 0.02);
   fsm.tick(w, exec, 0.02);
@@ -84,7 +97,7 @@ TEST(PushRedBoxFSMTest, back_up_to_done_after_hold) {
   cfg.back_up_hold_sec = 0.1;
   PushRedBoxFSM fsm(cfg);
   SkillExecutor exec = make_executor();
-  WorldView w = world_at_box(1.0);
+  WorldView w = world_at_box(1.0, true);
 
   for (int i = 0; i < 4; ++i) {
     fsm.tick(w, exec, 0.02);
