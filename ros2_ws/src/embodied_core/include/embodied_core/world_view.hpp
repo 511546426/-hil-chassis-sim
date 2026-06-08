@@ -21,11 +21,11 @@ struct ObjectPose {
 /// FSM / Skill 只读 WorldView，不包含 rclcpp 头文件。
 struct WorldView {
   // --- 底盘 ---
-  double base_x{0.0};
-  double base_y{0.0};
-  double base_yaw{0.0};
-  double base_vx{0.0};
-  double base_steer{0.0};
+  double base_x{0.0}; // 底盘x坐标
+  double base_y{0.0}; // 底盘y坐标
+  double base_yaw{0.0}; // 底盘yaw
+  double base_vx{0.0}; // 底盘vx
+  double base_steer{0.0}; // 底盘steer
 
   // --- 机械臂（实际值，来自 tracker / world_state）---
   double arm_shoulder{0.0};
@@ -37,8 +37,8 @@ struct WorldView {
   std::vector<ObjectPose> objects;
 
   // --- 接触（M4 后由 simulation_node 填入）---
-  bool gripper_touching_object{false};
-  std::string touched_object_name;
+  bool gripper_touching_object{false}; // 机械臂是否接触物体
+  std::string touched_object_name; // 接触物体的名字
 
   /// 查找 box_red 的 (x, y)；不存在返回 nullopt
   /// 参考：chassis_agent/agent_node.py::_box_red_xy

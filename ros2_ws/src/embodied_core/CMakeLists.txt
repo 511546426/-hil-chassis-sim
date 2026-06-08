@@ -10,7 +10,11 @@ find_package(ament_cmake REQUIRED)
 
 # ---- 库 ----
 add_library(${PROJECT_NAME} SHARED
+  src/navigation.cpp
   src/world_view.cpp
+  src/navigate_skill.cpp
+  src/manipulate_skill.cpp
+  src/skill_executor.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -43,6 +47,22 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_world_view ${PROJECT_NAME})
   target_include_directories(test_world_view PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  )
+
+  ament_add_gtest(test_navigation
+    test/test_navigation.cpp
+  )
+  target_link_libraries(test_navigation ${PROJECT_NAME})
+  target_include_directories(test_navigation PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  )
+
+  ament_add_gtest(test_skills
+    test/test_skills.cpp
+  )
+  target_link_libraries(test_skills ${PROJECT_NAME})
+  target_include_directories(test_skills PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   )
 endif()
