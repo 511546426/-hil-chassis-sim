@@ -16,7 +16,10 @@ from chassis_common import (
     ARENA_HALF,
     TIMESTEP,
     EmbodiedTracker,
+    VirtualGraspState,
+    begin_virtual_grasp,
     detect_gripper_contact,
+    end_virtual_grasp,
     initialize_robot_pose,
     load_model,
     read_base_pose,
@@ -26,6 +29,7 @@ from chassis_common import (
     step_embodied_kinematic,
 )
 from embodied_msgs.msg import EmbodiedCommand, EmbodiedWorldState
+from embodied_msgs.srv import SetVirtualGrasp
 from geometry_msgs.msg import Pose
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
@@ -81,7 +85,13 @@ class SimulationNode(Node):
         self.pub_arm = self.create_publisher(JointState, '/arm_state', 10)
         self.pub_world = self.create_publisher(EmbodiedWorldState, '/world_state', 10)
         self.pub_timer = self.create_timer(TIMESTEP, self.publish_state)
+        self.srv_grasp = self.create_service(
+            SetVirtualGrasp,
+            '/sim/set_virtual_grasp',
+            self.on_set_virtual_grasp,
+        )
 
+        self.virtual_grasp = VirtualGraspState()
         self._last_cmd_log = ''
 
     def on_control_cmd(self, msg: EmbodiedCommand) -> None:
@@ -103,6 +113,35 @@ class SimulationNode(Node):
         if summary != self._last_cmd_log:
             self.get_logger().info(f'← cmd {summary}')
             self._last_cmd_log = summary
+
+    def on_set_virtual_grasp(
+        self,
+        request: SetVirtualGrasp.Request,
+        response: SetVirtualGrasp.Response,
+    ) -> SetVirtualGrasp.Response:
+        object_name = request.object_name.strip() or 'box_red'
+        if request.enable:
+            try:
+                self.virtual_grasp = begin_virtual_grasp(model, data, object_name)
+                response.success = True
+                response.message = f'attached {self.virtual_grasp.object_body}'
+                self.get_logger().info(
+                    f'virtual grasp ON: {self.virtual_grasp.object_body} '
+                    f'offset=({self.virtual_grasp.offset_x:+.3f}, '
+                    f'{self.virtual_grasp.offset_y:+.3f}, '
+                    f'{self.virtual_grasp.offset_z:+.3f})'
+                )
+            except ValueError as exc:
+                response.success = False
+                response.message = str(exc)
+                self.get_logger().warning(f'virtual grasp failed: {exc}')
+        else:
+            released = self.virtual_grasp.object_body or object_name
+            self.virtual_grasp = end_virtual_grasp(self.virtual_grasp)
+            response.success = True
+            response.message = f'released {released}'
+            self.get_logger().info(f'virtual grasp OFF: {released}')
+        return response
 
     def publish_state(self) -> None:
         t = self.tracker
@@ -222,7 +261,9 @@ def _run_loop(node: SimulationNode, stdscr=None) -> None:
             rclpy.spin_once(node, timeout_sec=0.0)
 
             vx, omega, arm, grip = t.step(TIMESTEP)
-            step_embodied_kinematic(model, data, t, TIMESTEP, arm, vx, omega)
+            step_embodied_kinematic(
+                model, data, t, TIMESTEP, arm, vx, omega, node.virtual_grasp
+            )
 
             if use_panel and step % 5 == 0:
                 x, y, yaw_deg = read_base_pose(model, data)

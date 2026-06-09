@@ -12,6 +12,7 @@ from .state_reader import (
     read_object_poses,
 )
 from .dynamics import CarTracker, EmbodiedTracker, VelocityTracker, ramp_toward
+from .interaction import VirtualGraspState, begin_virtual_grasp, end_virtual_grasp
 from .kinematics import advance_base_pose, apply_velocity_command, set_base_pose, steering_to_omega
 from .sim_step import step_embodied_kinematic
 from .model import (
@@ -57,6 +58,9 @@ __all__ = [
     'GRIP_CONTACT_Z_TOL',
     'initialize_robot_pose',
     'steering_to_omega',
+    'VirtualGraspState',
+    'begin_virtual_grasp',
+    'end_virtual_grasp',
     'ramp_toward',
     'CarTracker',
     'EmbodiedTracker',

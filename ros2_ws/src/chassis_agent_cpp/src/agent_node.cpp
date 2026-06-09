@@ -10,6 +10,7 @@
 
 #include <embodied_msgs/msg/embodied_command.hpp>
 #include <embodied_msgs/msg/embodied_world_state.hpp>
+#include <embodied_msgs/srv/set_virtual_grasp.hpp>
 #include <embodied_core/arm_preset.hpp>
 #include <embodied_core/push_red_box_fsm.hpp>
 #include <embodied_core/skill_executor.hpp>
@@ -20,6 +21,7 @@
 using namespace std::chrono_literals;
 using EmbodiedCommand = embodied_msgs::msg::EmbodiedCommand;
 using EmbodiedWorldState = embodied_msgs::msg::EmbodiedWorldState;
+using SetVirtualGrasp = embodied_msgs::srv::SetVirtualGrasp;
 
 namespace {
 
@@ -55,6 +57,7 @@ class AgentNode : public rclcpp::Node {
         [this](const EmbodiedWorldState::SharedPtr msg) { on_world_state(*msg); });
 
     pub_cmd_ = create_publisher<EmbodiedCommand>("/control_cmd", 10);
+    grasp_client_ = create_client<SetVirtualGrasp>("/sim/set_virtual_grasp");
     timer_ = create_wall_timer(20ms, [this]() { publish_cmd(); });
 
     RCLCPP_INFO(get_logger(), "C++ agent_node 已启动（M3 PushRedBoxFSM）");
@@ -90,10 +93,10 @@ class AgentNode : public rclcpp::Node {
         RCLCPP_INFO(get_logger(), "%s", log->c_str());
       }
       if (fsm_.should_enable_virtual_grasp()) {
-        RCLCPP_INFO_ONCE(get_logger(), "FSM 请求 virtual grasp（M5 实现 service）");
+        call_virtual_grasp(true, "box_red");
       }
       if (fsm_.should_disable_virtual_grasp()) {
-        RCLCPP_INFO_ONCE(get_logger(), "FSM 请求释放 virtual grasp（M5 实现 service）");
+        call_virtual_grasp(false, "box_red");
       }
     }
 
@@ -120,11 +123,46 @@ class AgentNode : public rclcpp::Node {
     }
   }
 
+  void call_virtual_grasp(bool enable, const std::string &object_name) {
+    if (!grasp_client_->service_is_ready()) {
+      RCLCPP_WARN(
+          get_logger(),
+          "virtual grasp service 不可用 (enable=%d object=%s)",
+          enable ? 1 : 0,
+          object_name.c_str());
+      return;
+    }
+
+    auto request = std::make_shared<SetVirtualGrasp::Request>();
+    request->enable = enable;
+    request->object_name = object_name;
+
+    grasp_client_->async_send_request(
+        request,
+        [this, enable](rclcpp::Client<SetVirtualGrasp>::SharedFuture future) {
+          const auto response = future.get();
+          if (response->success) {
+            RCLCPP_INFO(
+                get_logger(),
+                "virtual grasp %s: %s",
+                enable ? "ON" : "OFF",
+                response->message.c_str());
+          } else {
+            RCLCPP_WARN(
+                get_logger(),
+                "virtual grasp %s 失败: %s",
+                enable ? "ON" : "OFF",
+                response->message.c_str());
+          }
+        });
+  }
+
   embodied_core::SkillExecutor executor_;
   embodied_core::PushRedBoxFSM fsm_;
 
   rclcpp::Subscription<EmbodiedWorldState>::SharedPtr sub_world_;
   rclcpp::Publisher<EmbodiedCommand>::SharedPtr pub_cmd_;
+  rclcpp::Client<SetVirtualGrasp>::SharedPtr grasp_client_;
   rclcpp::TimerBase::SharedPtr timer_;
 
   std::optional<embodied_core::WorldView> world_;
