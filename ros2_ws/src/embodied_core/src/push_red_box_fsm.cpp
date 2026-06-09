@@ -47,6 +47,7 @@ void PushRedBoxFSM::reset() {
   phase_time_ = 0.0;
   virtual_grasp_request_ = false;
   virtual_grasp_release_ = false;
+  has_box_push_origin_ = false;
   pending_log_.reset();
 }
 
@@ -85,6 +86,28 @@ void PushRedBoxFSM::transition(PushRedBoxPhase next, const char *reason) {
   virtual_grasp_request_ = (next == PushRedBoxPhase::BackUp);
   virtual_grasp_release_ =
       (next == PushRedBoxPhase::Done || next == PushRedBoxPhase::Failed);
+}
+
+void PushRedBoxFSM::capture_box_push_origin(const WorldView &world) {
+  const auto box = world.box_red_xy();
+  if (box) {
+    box_x0_ = box->first;
+    box_y0_ = box->second;
+    has_box_push_origin_ = true;
+  } else {
+    has_box_push_origin_ = false;
+  }
+}
+
+double PushRedBoxFSM::box_push_distance(const WorldView &world) const {
+  if (!has_box_push_origin_) {
+    return 0.0;
+  }
+  const auto box = world.box_red_xy();
+  if (!box) {
+    return 0.0;
+  }
+  return std::hypot(box->first - box_x0_, box->second - box_y0_);
 }
 
 bool PushRedBoxFSM::navigation_complete(
@@ -181,6 +204,7 @@ SkillOutput PushRedBoxFSM::tick(
       if (ManipulateSkill::gripper_at(world, 1.0, config_.gripper_tol)
           && world.gripper_touching_object) {
         transition(PushRedBoxPhase::BackUp, "gripper closed with contact");
+        capture_box_push_origin(world);
         last_output_ = executor.step_navigate_to_box_red(world, true);
       } else if (phase_time_ > config_.phase_timeout_gripper) {
         transition(PushRedBoxPhase::Failed, "close gripper timeout");
@@ -190,10 +214,15 @@ SkillOutput PushRedBoxFSM::tick(
     }
 
     case PushRedBoxPhase::BackUp: {
-      // M3：倒车占位（M5 attach 后 M6 用位移判据结束）
       last_output_ = executor.step_navigate_to_box_red(world, true);
-      if (phase_time_ >= config_.back_up_hold_sec) {
-        transition(PushRedBoxPhase::Done, "back up hold complete (M3)");
+      const double moved = box_push_distance(world);
+      if (has_box_push_origin_ && moved >= config_.push_min_dist) {
+        std::ostringstream reason;
+        reason << "box moved " << moved << " m";
+        transition(PushRedBoxPhase::Done, reason.str().c_str());
+        last_output_ = hold_output(last_output_);
+      } else if (phase_time_ > config_.phase_timeout_back_up) {
+        transition(PushRedBoxPhase::Failed, "back up timeout");
         last_output_ = hold_output(last_output_);
       }
       break;

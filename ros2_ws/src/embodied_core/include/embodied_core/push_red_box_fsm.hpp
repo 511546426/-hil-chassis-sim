@@ -31,7 +31,7 @@ class PushRedBoxFSM {
     double phase_timeout_nav{60.0};
     double phase_timeout_reach{15.0};
     double phase_timeout_gripper{15.0};
-    double back_up_hold_sec{2.0};
+    double phase_timeout_back_up{15.0};
     double arm_tol{0.08};
     double gripper_tol{0.05};
   };
@@ -65,6 +65,8 @@ class PushRedBoxFSM {
       const SkillOutput &out) const;
 
   void transition(PushRedBoxPhase next, const char *reason);
+  void capture_box_push_origin(const WorldView &world);
+  [[nodiscard]] double box_push_distance(const WorldView &world) const;
   [[nodiscard]] SkillOutput idle_output() const;
   [[nodiscard]] SkillOutput hold_output(const SkillOutput &last) const;
 
@@ -73,6 +75,9 @@ class PushRedBoxFSM {
   double phase_time_{0.0};
   bool virtual_grasp_request_{false};
   bool virtual_grasp_release_{false};
+  bool has_box_push_origin_{false};
+  double box_x0_{0.0};
+  double box_y0_{0.0};
   SkillOutput last_output_{};
   std::optional<std::string> pending_log_;
 };

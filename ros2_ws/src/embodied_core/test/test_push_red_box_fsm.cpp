@@ -92,9 +92,9 @@ TEST(PushRedBoxFSMTest, close_to_back_up_when_gripper_closed_and_touching) {
   EXPECT_TRUE(fsm.should_enable_virtual_grasp());
 }
 
-TEST(PushRedBoxFSMTest, back_up_to_done_after_hold) {
+TEST(PushRedBoxFSMTest, back_up_to_done_when_box_moved_enough) {
   PushRedBoxFSM::Config cfg;
-  cfg.back_up_hold_sec = 0.1;
+  cfg.push_min_dist = 0.20;
   PushRedBoxFSM fsm(cfg);
   SkillExecutor exec = make_executor();
   WorldView w = world_at_box(1.0, true);
@@ -104,9 +104,32 @@ TEST(PushRedBoxFSMTest, back_up_to_done_after_hold) {
   }
   ASSERT_EQ(fsm.phase(), PushRedBoxPhase::BackUp);
 
-  fsm.tick(w, exec, 0.04);
-  fsm.tick(w, exec, 0.04);
-  fsm.tick(w, exec, 0.04);
+  w.objects[0].x = 2.29;
+  fsm.tick(w, exec, 0.02);
   EXPECT_EQ(fsm.phase(), PushRedBoxPhase::Done);
   EXPECT_TRUE(fsm.should_disable_virtual_grasp());
+  const auto log = fsm.take_transition_log();
+  ASSERT_TRUE(log.has_value());
+  EXPECT_NE(log->find("box moved"), std::string::npos);
+}
+
+TEST(PushRedBoxFSMTest, back_up_waits_until_push_min_dist) {
+  PushRedBoxFSM::Config cfg;
+  cfg.push_min_dist = 0.20;
+  PushRedBoxFSM fsm(cfg);
+  SkillExecutor exec = make_executor();
+  WorldView w = world_at_box(1.0, true);
+
+  for (int i = 0; i < 4; ++i) {
+    fsm.tick(w, exec, 0.02);
+  }
+  ASSERT_EQ(fsm.phase(), PushRedBoxPhase::BackUp);
+
+  w.objects[0].x = 2.40;
+  fsm.tick(w, exec, 0.02);
+  EXPECT_EQ(fsm.phase(), PushRedBoxPhase::BackUp);
+
+  w.objects[0].x = 2.29;
+  fsm.tick(w, exec, 0.02);
+  EXPECT_EQ(fsm.phase(), PushRedBoxPhase::Done);
 }

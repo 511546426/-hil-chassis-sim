@@ -33,8 +33,6 @@ SkillOutput NavigateSkill::compute(
     double target_x, double target_y,
     bool reverse) const {
   if (reverse) {
-    // TODO(changwei): M6 倒车推箱 — 参考 PHASE2_CPP_IMPLEMENTATION_GUIDE §9
-    // 建议：target_linear_x = -max_vx_reverse_，steer 按目标朝向微调
     SkillOutput out = make_output(NavigationCommand{0.0, 0.0, false});
     out.target_linear_x = -max_vx_reverse_;
     return out;

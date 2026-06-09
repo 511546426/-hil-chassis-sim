@@ -19,7 +19,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "M5 smoke test logs: $LOG_DIR"
+echo "M6 smoke test logs: $LOG_DIR"
 SIMULATION_LOG_ONLY=1 "$PY" "$SIM_NODE" >"$SIM_LOG" 2>&1 &
 SIM_PID=$!
 sleep 5
@@ -47,7 +47,7 @@ checks = [
     ('sim grasp ON', 'virtual grasp ON' in sim or 'attached box_red' in sim),
     ('agent grasp ON', 'virtual grasp ON' in agent),
     ('BackUp transition', 'CloseGripper -> BackUp' in agent),
-    ('Done transition', 'BackUp -> Done' in agent),
+    ('Done on box displacement', 'BackUp -> Done: box moved' in agent),
     ('sim grasp OFF', 'virtual grasp OFF' in sim or 'released box_red' in sim),
 ]
 failed = 0
