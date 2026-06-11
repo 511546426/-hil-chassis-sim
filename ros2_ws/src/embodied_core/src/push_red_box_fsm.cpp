@@ -51,6 +51,14 @@ void PushRedBoxFSM::reset() {
   pending_log_.reset();
 }
 
+void PushRedBoxFSM::begin_manipulate_after_nav() {
+  phase_ = PushRedBoxPhase::ReachArm;
+  phase_time_ = 0.0;
+  virtual_grasp_request_ = false;
+  virtual_grasp_release_ = false;
+  pending_log_ = "Hybrid RLNav -> ReachArm: RL navigation complete";
+}
+
 const char *PushRedBoxFSM::phase_name() const {
   return phase_to_string(phase_);
 }

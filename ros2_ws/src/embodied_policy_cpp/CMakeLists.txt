@@ -14,6 +14,7 @@ find_package(onnxruntime CONFIG REQUIRED)
 add_library(${PROJECT_NAME} SHARED
   src/onnx_session.cpp
   src/rl_brain.cpp
+  src/hybrid_brain.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

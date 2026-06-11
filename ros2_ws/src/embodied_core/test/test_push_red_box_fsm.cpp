@@ -133,3 +133,15 @@ TEST(PushRedBoxFSMTest, back_up_waits_until_push_min_dist) {
   fsm.tick(w, exec, 0.02);
   EXPECT_EQ(fsm.phase(), PushRedBoxPhase::Done);
 }
+
+TEST(PushRedBoxFSMTest, begin_manipulate_after_nav_starts_at_reach) {
+  PushRedBoxFSM fsm;
+  SkillExecutor exec = make_executor();
+  WorldView w = world_at_box();
+
+  fsm.begin_manipulate_after_nav();
+  EXPECT_EQ(fsm.phase(), PushRedBoxPhase::ReachArm);
+  const SkillOutput out = fsm.tick(w, exec, 0.02);
+  EXPECT_NEAR(out.arm_shoulder, kArmReach.shoulder, 1e-6);
+  ASSERT_TRUE(fsm.take_transition_log().has_value());
+}

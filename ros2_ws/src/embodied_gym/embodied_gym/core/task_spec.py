@@ -23,6 +23,7 @@ class GoalSpec:
 @dataclass(frozen=True)
 class SuccessSpec:
     distance_lt: float = 0.30
+    push_min_dist: float = 0.20
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class RewardSpec:
     time: float = -0.01
     collision: float = -5.0
     success: float = 10.0
+    push_success: float = 20.0
     out_of_bounds: float = -5.0
 
 
@@ -93,6 +95,7 @@ def load_task_spec(path: str | Path) -> TaskSpec:
         ),
         success=SuccessSpec(
             distance_lt=float(raw.get('success', {}).get('distance_lt', 0.30)),
+            push_min_dist=float(raw.get('success', {}).get('push_min_dist', 0.20)),
         ),
         reset=ResetSpec(
             base_x=float(base_raw.get('x', 0.0)),
@@ -105,6 +108,7 @@ def load_task_spec(path: str | Path) -> TaskSpec:
             time=float(reward_raw.get('time', -0.01)),
             collision=float(reward_raw.get('collision', -5.0)),
             success=float(reward_raw.get('success', 10.0)),
+            push_success=float(reward_raw.get('push_success', 20.0)),
             out_of_bounds=float(reward_raw.get('out_of_bounds', -5.0)),
         ),
         limits=LimitsSpec(

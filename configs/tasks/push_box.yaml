@@ -1,0 +1,25 @@
+name: push_box
+max_steps: 1500
+dt: 0.02
+
+goal:
+  type: object
+  object_name: box_red
+  standoff: 0.35
+
+success:
+  distance_lt: 0.30
+  push_min_dist: 0.20
+
+reset:
+  base: { x: 0.0, y: 0.0, yaw: 0.0 }
+
+reward:
+  progress: 1.5
+  time: -0.005
+  success: 12.0
+  push_success: 20.0
+  out_of_bounds: -10.0
+
+limits:
+  arena_half: 15.0

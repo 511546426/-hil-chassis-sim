@@ -16,6 +16,7 @@
 #include <embodied_core/arm_preset.hpp>
 #include <embodied_core/rule_brain.hpp>
 #include <embodied_core/task_goal.hpp>
+#include <embodied_policy_cpp/hybrid_brain.hpp>
 #include <embodied_policy_cpp/rl_brain.hpp>
 #include <rclcpp/rclcpp.hpp>
 
@@ -76,9 +77,27 @@ std::unique_ptr<embodied_core::Brain> make_brain(
     brain->reset(rl_cfg.goal);
     return brain;
   }
+  if (brain_type == "hybrid") {
+    const std::string policy_path = node.get_parameter("policy").as_string();
+    if (policy_path.empty()) {
+      RCLCPP_FATAL(
+          node.get_logger(),
+          "brain=hybrid 需要 -p policy:=/path/to/nav_policy.onnx");
+      throw std::runtime_error("policy path required for brain=hybrid");
+    }
+    embodied_policy_cpp::HybridBrain::Config hybrid_cfg;
+    hybrid_cfg.rl.policy_path = policy_path;
+    hybrid_cfg.rl.goal = embodied_core::TaskGoal::nav_to_object(
+        "box_red", node.get_parameter("standoff").as_double());
+    hybrid_cfg.rl.arrive_dist = node.get_parameter("arrive_dist").as_double();
+    hybrid_cfg.fsm = rule_cfg.fsm;
+    auto brain = std::make_unique<embodied_policy_cpp::HybridBrain>(hybrid_cfg);
+    brain->reset(embodied_core::TaskGoal::push_red_box());
+    return brain;
+  }
   RCLCPP_FATAL(
       node.get_logger(),
-      "未知 brain 类型: %s（支持: rule, rl）",
+      "未知 brain 类型: %s（支持: rule, rl, hybrid）",
       brain_type.c_str());
   throw std::runtime_error("unknown brain type");
 }
@@ -111,6 +130,11 @@ class AgentNode : public rclcpp::Node {
           get_parameter("task").as_string().c_str(),
           get_parameter("standoff").as_double(),
           get_parameter("arrive_dist").as_double(),
+          get_parameter("policy").as_string().c_str());
+    } else if (brain_type == "hybrid") {
+      RCLCPP_INFO(
+          get_logger(),
+          "  任务: Hybrid 推红箱（RL 导航 + Rule 操作 policy=%s）",
           get_parameter("policy").as_string().c_str());
     }
     if (brain_type == "rule") {

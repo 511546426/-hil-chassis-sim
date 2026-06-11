@@ -59,6 +59,9 @@ class PushRedBoxFSM {
 
   void reset();
 
+  /// P3-M4：RL 导航完成后，从 ReachArm 阶段开始规则操作
+  void begin_manipulate_after_nav();
+
  private:
   [[nodiscard]] bool navigation_complete(
       const WorldView &world,
