@@ -9,10 +9,10 @@ import mujoco
 from chassis_common import (
     EmbodiedTracker,
     VirtualGraspState,
-    initialize_robot_pose,
     load_model,
     read_base_pose,
     read_object_poses,
+    reset_episode_state,
     step_embodied_kinematic,
 )
 from chassis_common.kinematics import steering_to_omega
@@ -61,25 +61,15 @@ class SimSession:
         base_y: float = 0.0,
         base_yaw: float = 0.0,
     ) -> SimState:
-        initialize_robot_pose(self.model, self.data)
-        for jname, val in (
-            ('slide_x', base_x),
-            ('slide_y', base_y),
-            ('hinge_z', base_yaw),
-        ):
-            jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, jname)
-            if jid >= 0:
-                self.data.qpos[self.model.jnt_qposadr[jid]] = val
-        self.data.qvel[:] = 0.0
-        mujoco.mj_forward(self.model, self.data)
-
-        self.tracker = EmbodiedTracker(
-            max_linear_accel=self.tracker.max_linear_accel,
-            max_linear_decel=self.tracker.max_linear_decel,
-            max_steer_rate=self.tracker.max_steer_rate,
-            max_joint_rate=self.tracker.max_joint_rate,
+        self.tracker, self.virtual_grasp = reset_episode_state(
+            self.model,
+            self.data,
+            base_x=base_x,
+            base_y=base_y,
+            base_yaw=base_yaw,
+            tracker=self.tracker,
+            virtual_grasp=self.virtual_grasp,
         )
-        self.virtual_grasp = VirtualGraspState()
         return self.read_state()
 
     def object_poses(self) -> dict[str, tuple[float, float, float]]:

@@ -10,6 +10,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/EmbodiedCommand.msg"
   "msg/EmbodiedWorldState.msg"
   "srv/SetVirtualGrasp.srv"
+  "srv/ResetEpisode.srv"
   DEPENDENCIES std_msgs geometry_msgs
 )
 

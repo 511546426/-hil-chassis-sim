@@ -1,5 +1,6 @@
 from .arm_control import apply_embodied_actuators, render_arm_for_display
 from .actuators import restore_physics_snapshot
+from .episode_reset import reset_episode_state
 from .state_reader import (
     GRIP_CONTACT_DIST,
     GRIP_CONTACT_Z_TOL,
@@ -61,6 +62,7 @@ __all__ = [
     'VirtualGraspState',
     'begin_virtual_grasp',
     'end_virtual_grasp',
+    'reset_episode_state',
     'ramp_toward',
     'CarTracker',
     'EmbodiedTracker',

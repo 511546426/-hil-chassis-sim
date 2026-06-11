@@ -25,11 +25,12 @@ from chassis_common import (
     read_base_pose,
     read_base_velocity,
     read_object_poses,
+    reset_episode_state,
     setup_follow_camera,
     step_embodied_kinematic,
 )
 from embodied_msgs.msg import EmbodiedCommand, EmbodiedWorldState
-from embodied_msgs.srv import SetVirtualGrasp
+from embodied_msgs.srv import ResetEpisode, SetVirtualGrasp
 from geometry_msgs.msg import Pose
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
@@ -90,6 +91,11 @@ class SimulationNode(Node):
             '/sim/set_virtual_grasp',
             self.on_set_virtual_grasp,
         )
+        self.srv_reset = self.create_service(
+            ResetEpisode,
+            '/sim/reset_episode',
+            self.on_reset_episode,
+        )
 
         self.virtual_grasp = VirtualGraspState()
         self._last_cmd_log = ''
@@ -141,6 +147,33 @@ class SimulationNode(Node):
             response.success = True
             response.message = f'released {released}'
             self.get_logger().info(f'virtual grasp OFF: {released}')
+        return response
+
+    def on_reset_episode(
+        self,
+        request: ResetEpisode.Request,
+        response: ResetEpisode.Response,
+    ) -> ResetEpisode.Response:
+        try:
+            self.tracker, self.virtual_grasp = reset_episode_state(
+                model,
+                data,
+                base_x=float(request.base_x),
+                base_y=float(request.base_y),
+                base_yaw=float(request.base_yaw),
+                tracker=self.tracker,
+                virtual_grasp=self.virtual_grasp,
+            )
+            response.success = True
+            response.message = (
+                f'reset base=({request.base_x:.3f},{request.base_y:.3f},'
+                f'{request.base_yaw:.3f})'
+            )
+            self.get_logger().info(response.message)
+        except Exception as exc:  # noqa: BLE001 — service must return structured failure
+            response.success = False
+            response.message = str(exc)
+            self.get_logger().error(f'reset_episode failed: {exc}')
         return response
 
     def publish_state(self) -> None:

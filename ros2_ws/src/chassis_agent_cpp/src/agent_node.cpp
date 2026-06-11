@@ -11,6 +11,7 @@
 
 #include <embodied_msgs/msg/embodied_command.hpp>
 #include <embodied_msgs/msg/embodied_world_state.hpp>
+#include <embodied_msgs/srv/reset_episode.hpp>
 #include <embodied_msgs/srv/set_virtual_grasp.hpp>
 #include <embodied_core/brain.hpp>
 #include <embodied_core/arm_preset.hpp>
@@ -26,6 +27,7 @@ using namespace std::chrono_literals;
 using EmbodiedCommand = embodied_msgs::msg::EmbodiedCommand;
 using EmbodiedWorldState = embodied_msgs::msg::EmbodiedWorldState;
 using SetVirtualGrasp = embodied_msgs::srv::SetVirtualGrasp;
+using ResetEpisode = embodied_msgs::srv::ResetEpisode;
 
 namespace {
 
@@ -52,6 +54,15 @@ embodied_core::TaskGoal rl_task_goal_from_node(rclcpp::Node &node) {
     return embodied_core::TaskGoal::push_red_box();
   }
   return embodied_core::TaskGoal::nav_to_object("box_red", standoff);
+}
+
+embodied_core::TaskGoal agent_task_goal_from_node(
+    rclcpp::Node &node,
+    const std::string &brain_type) {
+  if (brain_type == "rule" || brain_type == "hybrid") {
+    return embodied_core::TaskGoal::push_red_box();
+  }
+  return rl_task_goal_from_node(node);
 }
 
 std::unique_ptr<embodied_core::Brain> make_brain(
@@ -114,9 +125,9 @@ class AgentNode : public rclcpp::Node {
     declare_parameter("arrive_dist", kDefaultArriveDist);
 
     const auto rule_cfg = rule_brain_config_from_node(*this);
-    brain_ = make_brain(*this, rule_cfg);
-
     const std::string brain_type = get_parameter("brain").as_string();
+    task_goal_ = agent_task_goal_from_node(*this, brain_type);
+    brain_ = make_brain(*this, rule_cfg);
     RCLCPP_INFO(get_logger(), "C++ agent_node 已启动（brain=%s）", brain_type.c_str());
     if (brain_type == "rule") {
       RCLCPP_INFO(
@@ -151,10 +162,30 @@ class AgentNode : public rclcpp::Node {
 
     pub_cmd_ = create_publisher<EmbodiedCommand>("/control_cmd", 10);
     grasp_client_ = create_client<SetVirtualGrasp>("/sim/set_virtual_grasp");
+    srv_reset_ = create_service<ResetEpisode>(
+        "/agent/reset_episode",
+        [this](
+            const ResetEpisode::Request::SharedPtr request,
+            ResetEpisode::Response::SharedPtr response) {
+          (void)request;
+          reset_brain_episode(response);
+        });
     timer_ = create_wall_timer(20ms, [this]() { publish_cmd(); });
   }
 
  private:
+  void reset_brain_episode(const ResetEpisode::Response::SharedPtr &response) {
+    if (!brain_) {
+      response->success = false;
+      response->message = "brain not initialized";
+      return;
+    }
+    brain_->reset(task_goal_);
+    last_cmd_log_.clear();
+    response->success = true;
+    response->message = "agent brain reset";
+    RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
+  }
   void on_world_state(const EmbodiedWorldState &msg) {
     world_ = chassis_agent_cpp::world_from_msg(msg);
     world_valid_ = true;
@@ -243,10 +274,12 @@ class AgentNode : public rclcpp::Node {
   }
 
   std::unique_ptr<embodied_core::Brain> brain_;
+  embodied_core::TaskGoal task_goal_{embodied_core::TaskGoal::push_red_box()};
 
   rclcpp::Subscription<EmbodiedWorldState>::SharedPtr sub_world_;
   rclcpp::Publisher<EmbodiedCommand>::SharedPtr pub_cmd_;
   rclcpp::Client<SetVirtualGrasp>::SharedPtr grasp_client_;
+  rclcpp::Service<ResetEpisode>::SharedPtr srv_reset_;
   rclcpp::TimerBase::SharedPtr timer_;
 
   std::optional<embodied_core::WorldView> world_;

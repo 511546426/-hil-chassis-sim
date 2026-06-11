@@ -1,0 +1,7 @@
+# P3-M5：复位仿真 episode（base / 物体 / tracker）
+float64 base_x 0.0
+float64 base_y 0.0
+float64 base_yaw 0.0
+---
+bool success
+string message
