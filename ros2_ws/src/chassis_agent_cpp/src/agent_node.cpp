@@ -16,6 +16,7 @@
 #include <embodied_core/arm_preset.hpp>
 #include <embodied_core/rule_brain.hpp>
 #include <embodied_core/task_goal.hpp>
+#include <embodied_policy_cpp/rl_brain.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #include "chassis_agent_cpp/world_from_msg.hpp"
@@ -50,10 +51,17 @@ std::unique_ptr<embodied_core::Brain> make_brain(
     return brain;
   }
   if (brain_type == "rl") {
-    RCLCPP_FATAL(
-        node.get_logger(),
-        "brain=rl 尚未实现（P3-M2 ONNX + RLBrain）；请使用 brain:=rule");
-    throw std::runtime_error("brain=rl not implemented");
+    const std::string policy_path = node.get_parameter("policy").as_string();
+    if (policy_path.empty()) {
+      RCLCPP_FATAL(node.get_logger(), "brain=rl 需要 -p policy:=/path/to/nav_policy.onnx");
+      throw std::runtime_error("policy path required for brain=rl");
+    }
+    embodied_policy_cpp::RLBrain::Config rl_cfg;
+    rl_cfg.policy_path = policy_path;
+    rl_cfg.goal = embodied_core::TaskGoal::point(2.5, 0.0);
+    auto brain = std::make_unique<embodied_policy_cpp::RLBrain>(rl_cfg);
+    brain->reset(rl_cfg.goal);
+    return brain;
   }
   RCLCPP_FATAL(
       node.get_logger(),
@@ -81,6 +89,11 @@ class AgentNode : public rclcpp::Node {
       RCLCPP_INFO(
           get_logger(),
           "  任务: NAV → REACH → 夹爪 → 倒车推箱（≥ 0.2 m）");
+    } else if (brain_type == "rl") {
+      RCLCPP_INFO(
+          get_logger(),
+          "  任务: RL 导航（ONNX policy=%s）",
+          get_parameter("policy").as_string().c_str());
     }
     RCLCPP_INFO(
         get_logger(),

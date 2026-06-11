@@ -11,6 +11,8 @@ find_package(rclcpp REQUIRED)
 find_package(embodied_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(embodied_core REQUIRED)
+find_package(onnxruntime CONFIG REQUIRED)
+find_package(embodied_policy_cpp REQUIRED)
 
 add_executable(agent_node
   src/agent_node.cpp
@@ -25,6 +27,8 @@ target_link_libraries(agent_node
   embodied_msgs::embodied_msgs__rosidl_typesupport_cpp
   geometry_msgs::geometry_msgs__rosidl_typesupport_cpp
   embodied_core::embodied_core
+  embodied_policy_cpp::embodied_policy_cpp
+  onnxruntime::onnxruntime
 )
 target_compile_features(agent_node PUBLIC cxx_std_17)
 

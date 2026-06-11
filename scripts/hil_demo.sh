@@ -11,7 +11,7 @@ PYTHON="${CHASSIS_PYTHON:-$EMBODIED_PYTHON_DEFAULT}"
 SIM_NODE="$WS_DIR/install/chassis_simulation/lib/chassis_simulation/simulation_node"
 CTL_NODE="$WS_DIR/install/chassis_controller/lib/chassis_controller/controller_node"
 AGENT_CPP_NODE="$WS_DIR/install/chassis_agent_cpp/lib/chassis_agent_cpp/agent_node"
-BUILD_PACKAGES_AGENT=(embodied_msgs embodied_core chassis_common chassis_simulation chassis_agent_cpp)
+BUILD_PACKAGES_AGENT=(embodied_msgs embodied_core embodied_policy_cpp chassis_common chassis_simulation chassis_agent_cpp)
 BUILD_PACKAGES_TELEOP=(embodied_msgs chassis_common chassis_simulation chassis_controller)
 
 TELEOP_MODE=0
@@ -111,7 +111,7 @@ sources_changed() {
   if [[ "$TELEOP_MODE" -eq 1 ]]; then
     watch_dirs+=("$src_root/chassis_controller")
   else
-    watch_dirs+=("$src_root/embodied_core" "$src_root/chassis_agent_cpp")
+    watch_dirs+=("$src_root/embodied_core" "$src_root/embodied_policy_cpp" "$src_root/chassis_agent_cpp")
   fi
   find "${watch_dirs[@]}" \
     -type f \( -name '*.py' -o -name '*.cpp' -o -name '*.hpp' -o -name '*.msg' \

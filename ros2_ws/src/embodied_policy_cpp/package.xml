@@ -1,18 +1,14 @@
 <?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>chassis_agent_cpp</name>
+  <name>embodied_policy_cpp</name>
   <version>0.1.0</version>
-  <description>C++ 具身 Agent ROS 节点（M2：导航冒烟；M3+：FSM 推箱）</description>
+  <description>C++ ONNX policy inference for embodied RL (Phase 3)</description>
   <maintainer email="changwei@example.com">changwei</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-
-  <depend>rclcpp</depend>
-  <depend>embodied_msgs</depend>
-  <depend>geometry_msgs</depend>
   <depend>embodied_core</depend>
-  <depend>embodied_policy_cpp</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

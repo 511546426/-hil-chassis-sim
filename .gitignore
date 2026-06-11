@@ -23,6 +23,7 @@ ros2_ws/.cache/
 
 # SB3 models (二进制)
 *.zip
+*.onnx.data
 runs/
 
 # OS
