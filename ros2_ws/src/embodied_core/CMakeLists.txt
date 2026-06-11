@@ -16,11 +16,14 @@ add_library(${PROJECT_NAME} SHARED
   src/manipulate_skill.cpp
   src/skill_executor.cpp
   src/push_red_box_fsm.cpp
+  src/nav_obs_encoder.cpp
+  src/rule_brain.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 
 install(
   DIRECTORY include/
@@ -72,6 +75,22 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_push_red_box_fsm ${PROJECT_NAME})
   target_include_directories(test_push_red_box_fsm PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  )
+
+  ament_add_gtest(test_nav_obs_encoder
+    test/test_nav_obs_encoder.cpp
+  )
+  target_link_libraries(test_nav_obs_encoder ${PROJECT_NAME})
+  target_include_directories(test_nav_obs_encoder PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  )
+
+  ament_add_gtest(test_rule_brain
+    test/test_rule_brain.cpp
+  )
+  target_link_libraries(test_rule_brain ${PROJECT_NAME})
+  target_include_directories(test_rule_brain PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   )
 endif()

@@ -1,0 +1,19 @@
+{
+  "comment": "Must match embodied_core/include/embodied_core/nav_obs_spec.hpp",
+  "obs_dim": 8,
+  "action_dim": 2,
+  "arena_half": 15.0,
+  "goal_scale": 5.0,
+  "max_vx": 1.0,
+  "max_steer": 0.52,
+  "obs_index": {
+    "base_x": 0,
+    "base_y": 1,
+    "base_yaw": 2,
+    "goal_dx": 3,
+    "goal_dy": 4,
+    "dist_goal": 5,
+    "base_vx": 6,
+    "base_steer_abs": 7
+  }
+}
