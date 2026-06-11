@@ -11,6 +11,7 @@
 | [PHASE2_CPP_IMPLEMENTATION_GUIDE.md](./PHASE2_CPP_IMPLEMENTATION_GUIDE.md) | **推荐**：C++ 产品路径（`embodied_core` + `chassis_agent_cpp`） |
 | [PHASE2_CLASS_DIAGRAM.md](./PHASE2_CLASS_DIAGRAM.md) | 第二期类图、FSM、各类/函数职责说明 |
 | [PHASE2_IMPLEMENTATION_GUIDE.md](./PHASE2_IMPLEMENTATION_GUIDE.md) | Python 全栈参考 / 仿真侧 M4–M5 规格 |
+| [PHASE3_LEARNING_ARCHITECTURE.md](./PHASE3_LEARNING_ARCHITECTURE.md) | **第三期**：仿真自主学习（Python 训练 + C++ Brain/ONNX） |
 
 ---
 
@@ -25,7 +26,8 @@
 | 遥控 | **C++** | 已有 `controller_node` |
 | 消息 | **`.msg`** | C++/Python 共用 |
 | RL 训练（第三期） | **Python** | Gym + SB3 |
-| 策略推理 / 真机驱动（第三期+） | **C++** | ONNX、驱动 SDK |
+| 策略推理（第三期） | **C++** | 仿真期即 `embodied_policy_cpp` + ONNX；与 HIL `agent_node` 同路径 |
+| 真机驱动（更后期） | **C++** | 驱动 SDK，替换 simulation_node |
 
 **第一期**用 Python Agent 验证闭环；**第一期.b 起**新功能在 C++ 实现，Python Agent（`chassis_agent`）冻结为对照。
 
@@ -316,36 +318,38 @@ scripts/hil_demo.sh                                        # --agent
 
 > 原「C++ 对齐第一期」合并进 **第二期 M2**（`pure_pursuit` 移植 + ROS 冒烟），不再单独设里程碑。
 
-### 第三期：扩展大脑（按需，2 周+）
+### 第三期：仿真自主学习（2 周+）
 
-根据兴趣 **三选一或组合**：
+> **主文档**：[PHASE3_LEARNING_ARCHITECTURE.md](./PHASE3_LEARNING_ARCHITECTURE.md)  
+> **原则**：训练 Python · 契约/推理 C++ · 仿真期即 ONNX + `agent_node --brain rl`
 
-#### 选项 C1：强化学习（导航）
+根据兴趣 **可组合**：
 
-- [ ] **P3-C1-1** `embodied_gym/`：Gymnasium 环境，headless MuJoCo
-  - 观测：base pose + 目标相对坐标 + 障碍物距离
-  - 动作：`vx ∈ [-1,1]`, `steer ∈ [-0.52, 0.52]`（连续 2 维）
-  - 奖励：靠近目标 + 碰撞惩罚 + 时间惩罚
-- [ ] **P3-C1-2** 迁移 `cartpole_train.py` 模式：`PPO` / `SAC` 训练脚本
-- [ ] **P3-C1-3** 策略导出 ONNX → **`embodied_policy_cpp`**（C++ 推理，非 Python agent）
-- [ ] **P3-C1-4** 先只做导航，臂姿用离散预设（不动关节 RL）
+#### 选项 C1：强化学习（导航 → 推箱）— **推荐主线**
 
-**验收**：训练策略在 HIL 中自主导航到目标，成功率 > 80%（10 次试验）。
+- [ ] **P3-M0** `embodied_core::Brain` + `NavObsSpec` + `RuleBrain`（C++）
+- [ ] **P3-M1** `embodied_gym/` + `train_nav_rl.py`（Python PPO）
+- [ ] **P3-M2** ONNX 导出 + `embodied_policy_cpp::RLBrain`（C++）
+- [ ] **P3-M3** `agent_node --brain rl` HIL 评估
+- [ ] **P3-M4** 分层推箱（RL 导航 + Rule 操作 + virtual grasp）
+- [ ] **P3-M5** Rule vs RL 对照报告
 
-#### 选项 C2：LLM 任务规划
+**验收**：训练策略经 **C++ ONNX** 在 HIL 中导航到红箱；推箱位移 ≥ 0.2 m（或接近 FSM 基线）。
 
-- [ ] **P3-C2-0** `embodied_msgs`：新增 `EmbodiedGoal.msg`（第三期需要时再定义）
-- [ ] **P3-C2-1** `task_planner_node`：自然语言 → `EmbodiedGoal` 序列（JSON）
-- [ ] **P3-C2-2** 预定义任务模板：「去红箱」「抓蓝箱」「回原点」
-- [ ] **P3-C2-3** CLI 或简单 Web 输入任务描述
+#### 选项 C2：LLM 任务规划（第四期可叠加）
 
-**验收**：输入「把红箱推到左边」→ 输出可执行 goal 序列并跑通（允许简化语义）。
+- [ ] **P3-C2-0** `embodied_msgs`：新增 `EmbodiedGoal.msg`（按需）
+- [ ] **P3-C2-1** `task_planner_node`：自然语言 → `TaskGoal` 序列
+- [ ] **P3-C2-2** 预定义任务模板
+- [ ] **P3-C2-3** CLI 或 Web 输入
 
-#### 选项 C3：多任务与课程学习
+**验收**：输入任务描述 → 可执行 goal 序列并跑通（允许简化语义）。
 
-- [ ] **P3-C3-1** 任务注册表：红箱、蓝箱、绕柱、回巢
-- [ ] **P3-C3-2** Episode reset 服务：`/reset_simulation`
-- [ ] **P3-C3-3** 指标面板：成功率、耗时、碰撞次数
+#### 选项 C3：多任务基础设施（可与 C1 并行）
+
+- [ ] **P3-C3-1** TaskSpec 注册表（YAML）
+- [ ] **P3-C3-2** `/sim/reset_episode`
+- [ ] **P3-C3-3** 指标面板：成功率、耗时、碰撞
 
 ---
 
@@ -360,8 +364,8 @@ ros2_ws/src/
 ├── chassis_simulation/     # Python：simulation_node（MuJoCo HIL）
 ├── chassis_common/         # Python：模型、sim_step、接触/虚拟推箱
 ├── chassis_agent/          # Python：第一期对照（冻结，不扩展）
-├── embodied_gym/           # Python：第三期 RL 训练（可选）
-└── embodied_policy_cpp/    # C++：第三期策略推理（可选）
+├── embodied_gym/           # Python：第三期 RL 训练
+├── embodied_policy_cpp/    # C++：第三期 ONNX 推理（仿真期即启用）
 
 scripts/
 ├── hil_demo.sh             # --agent-cpp | --task push_red_box | 默认遥控

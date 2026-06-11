@@ -49,16 +49,21 @@ colcon build --symlink-install
 
 **一键启动（推荐）：**
 ```bash
+source scripts/env.sh
 ./scripts/hil_demo.sh
 ```
 
-脚本会**按需自动编译**（首次运行、或改动了 `chassis_common` / `chassis_simulation` / `chassis_controller` 源码时），然后在当前终端启动 `controller_node`（键盘遥控），并在后台启动 `simulation_node`（弹出 3D 窗口）。日志写入临时文件，可用 `tail -f` 分终端查看；按 `q` 退出或 Ctrl+C 结束后，仿真停止且日志自动删除。
-
-可选参数：
+默认启动 **C++ Agent 自动推红箱**（导航 → 伸臂 → 夹爪 → 倒车 ≥ 0.2 m）。脚本会按需自动编译，后台运行 `simulation_node`（MuJoCo 3D 窗口），日志写入临时目录；Ctrl+C 退出后自动清理。
 
 ```bash
-./scripts/hil_demo.sh --build      # 强制重新编译
-./scripts/hil_demo.sh --no-build # 跳过编译检查（适合已确认 install 最新时）
+./scripts/hil_demo.sh --teleop    # 键盘遥控（开发调试用）
+./scripts/hil_demo.sh --help
+```
+
+Headless 快速验收（无 3D 窗口）：
+
+```bash
+./scripts/m5_smoke_test.sh
 ```
 
 **手动分终端启动：**

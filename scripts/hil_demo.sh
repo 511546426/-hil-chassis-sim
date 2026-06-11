@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# 一键启动 HIL 演示：simulation_node（后台）+ controller_node 或 agent_node
-# 日志写入临时文件，可用 tail -f 分终端查看；退出后自动删除
+# 一键启动 HIL：simulation_node（后台）+ C++ Agent 推红箱（默认）或键盘遥控（--teleop）
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -11,45 +10,36 @@ EMBODIED_PYTHON_DEFAULT="${HOME}/miniconda3/envs/embodied/bin/python"
 PYTHON="${CHASSIS_PYTHON:-$EMBODIED_PYTHON_DEFAULT}"
 SIM_NODE="$WS_DIR/install/chassis_simulation/lib/chassis_simulation/simulation_node"
 CTL_NODE="$WS_DIR/install/chassis_controller/lib/chassis_controller/controller_node"
-AGENT_NODE="$WS_DIR/install/chassis_agent/lib/chassis_agent/agent_node"
 AGENT_CPP_NODE="$WS_DIR/install/chassis_agent_cpp/lib/chassis_agent_cpp/agent_node"
-BUILD_PACKAGES=(embodied_msgs chassis_common chassis_simulation chassis_controller chassis_agent)
-BUILD_PACKAGES_CPP=(embodied_msgs embodied_core chassis_common chassis_simulation chassis_agent_cpp)
+BUILD_PACKAGES_AGENT=(embodied_msgs embodied_core chassis_common chassis_simulation chassis_agent_cpp)
+BUILD_PACKAGES_TELEOP=(embodied_msgs chassis_common chassis_simulation chassis_controller)
 
-FORCE_BUILD=0
-SKIP_BUILD=0
-AGENT_MODE=0
-AGENT_CPP_MODE=0
+TELEOP_MODE=0
 
 usage() {
   cat <<EOF
 用法: $(basename "$0") [选项]
 
-  --agent      启动 Python agent_node（自主导航到红箱 + ARM_REACH）
-  --agent-cpp  启动 C++ agent_node（M3 推红箱 FSM：导航→伸臂→夹爪→倒车）
-  --build      强制重新编译后再启动
-  --no-build   跳过编译检查（install 不存在时直接报错）
+  （无参）     C++ Agent 自动推红箱（导航→伸臂→夹爪→倒车≥0.2m）
+  --teleop     键盘遥控 controller_node
   -h, --help   显示此帮助
 
-默认：若尚未编译，或源码比 install 更新，则自动增量编译相关包。
+示例:
+  $(basename "$0")
+  $(basename "$0") --teleop
+
+首次运行或源码更新后会自动增量编译。强制全量编译:
+  source scripts/env.sh && cd ros2_ws && colcon build --symlink-install
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --agent) AGENT_MODE=1; shift ;;
-    --agent-cpp) AGENT_CPP_MODE=1; shift ;;
-    --build) FORCE_BUILD=1; shift ;;
-    --no-build) SKIP_BUILD=1; shift ;;
+    --teleop) TELEOP_MODE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "未知选项: $1"; usage; exit 1 ;;
   esac
 done
-
-if [[ "$AGENT_MODE" -eq 1 && "$AGENT_CPP_MODE" -eq 1 ]]; then
-  echo "错误: --agent 与 --agent-cpp 不能同时使用"
-  exit 1
-fi
 
 if [[ ! -f "$ROS_SETUP" ]]; then
   echo "错误: 未找到 $ROS_SETUP"
@@ -63,16 +53,14 @@ if [[ ! -x "$PYTHON" ]]; then
 fi
 
 _running_hil_pids() {
-  # 只匹配真实节点进程，避免误匹配 shell 命令行里的路径字符串
   pgrep -f "${PYTHON} ${SIM_NODE}" 2>/dev/null || true
   pgrep -f "${AGENT_CPP_NODE}" 2>/dev/null || true
-  pgrep -f "${AGENT_NODE}" 2>/dev/null || true
   pgrep -f "${CTL_NODE}" 2>/dev/null || true
 }
 
 _existing_hil="$(_running_hil_pids | sort -u | tr '\n' ' ')"
 if [[ -n "${_existing_hil// }" ]]; then
-  echo "错误: 已有 HIL 进程在运行（simulation_node 或 agent_node）"
+  echo "错误: 已有 HIL 进程在运行（simulation_node 或 agent/controller）"
   echo "请先结束旧进程，例如:"
   echo "  pkill -9 -f '${WS_DIR}/install/chassis_simulation/lib/chassis_simulation/simulation_node'"
   echo "  pkill -9 -f '${WS_DIR}/install/chassis_agent_cpp/lib/chassis_agent_cpp/agent_node'"
@@ -97,52 +85,46 @@ needs_build() {
   if [[ ! -f "$WS_SETUP" || ! -f "$SIM_NODE" ]]; then
     return 0
   fi
-  if [[ "$AGENT_CPP_MODE" -eq 1 ]]; then
-    [[ ! -f "$AGENT_CPP_NODE" ]]
-  elif [[ "$AGENT_MODE" -eq 1 ]]; then
-    [[ ! -f "$AGENT_NODE" ]]
-  else
+  if [[ "$TELEOP_MODE" -eq 1 ]]; then
     [[ ! -f "$CTL_NODE" ]]
+  else
+    [[ ! -f "$AGENT_CPP_NODE" ]]
   fi
 }
 
 sources_changed() {
   local marker
-  if [[ "$AGENT_CPP_MODE" -eq 1 ]]; then
-    marker="$AGENT_CPP_NODE"
-    [[ -f "$marker" ]] || marker="$SIM_NODE"
-  elif [[ "$AGENT_MODE" -eq 1 ]]; then
-    marker="$AGENT_NODE"
-    [[ -f "$marker" ]] || marker="$SIM_NODE"
-  else
+  if [[ "$TELEOP_MODE" -eq 1 ]]; then
     marker="$CTL_NODE"
+  else
+    marker="$AGENT_CPP_NODE"
   fi
+  [[ -f "$marker" ]] || marker="$SIM_NODE"
   [[ -f "$marker" ]] || return 0
+
   local src_root="$WS_DIR/src"
   local -a watch_dirs=(
     "$src_root/chassis_common"
     "$src_root/chassis_simulation"
     "$src_root/embodied_msgs"
   )
-  if [[ "$AGENT_CPP_MODE" -eq 1 ]]; then
-    watch_dirs+=("$src_root/embodied_core" "$src_root/chassis_agent_cpp")
-  elif [[ "$AGENT_MODE" -eq 1 ]]; then
-    watch_dirs+=("$src_root/chassis_agent")
-  else
+  if [[ "$TELEOP_MODE" -eq 1 ]]; then
     watch_dirs+=("$src_root/chassis_controller")
+  else
+    watch_dirs+=("$src_root/embodied_core" "$src_root/chassis_agent_cpp")
   fi
   find "${watch_dirs[@]}" \
     -type f \( -name '*.py' -o -name '*.cpp' -o -name '*.hpp' -o -name '*.msg' \
-      -o -name '*.xml' -o -name 'CMakeLists.txt' -o -name 'package.xml' \) \
+      -o -name '*.srv' -o -name '*.xml' -o -name 'CMakeLists.txt' -o -name 'package.xml' \) \
     -newer "$marker" 2>/dev/null | grep -q .
 }
 
 build_workspace() {
   local -a packages
-  if [[ "$AGENT_CPP_MODE" -eq 1 ]]; then
-    packages=("${BUILD_PACKAGES_CPP[@]}")
+  if [[ "$TELEOP_MODE" -eq 1 ]]; then
+    packages=("${BUILD_PACKAGES_TELEOP[@]}")
   else
-    packages=("${BUILD_PACKAGES[@]}")
+    packages=("${BUILD_PACKAGES_AGENT[@]}")
   fi
   echo "============================================================"
   echo "编译 ROS 2 工作区（${packages[*]}）..."
@@ -155,34 +137,24 @@ build_workspace() {
   echo ""
 }
 
-if [[ "$FORCE_BUILD" -eq 1 ]]; then
+if needs_build; then
+  echo "未找到 install 产物，自动编译..."
   build_workspace
-elif [[ "$SKIP_BUILD" -eq 0 ]]; then
-  if needs_build; then
-    echo "未找到 install 产物，自动编译..."
-    build_workspace
-  elif sources_changed; then
-    echo "检测到源码更新，自动增量编译..."
-    build_workspace
-  fi
+elif sources_changed; then
+  echo "检测到源码更新，自动增量编译..."
+  build_workspace
 fi
 
 if [[ ! -f "$WS_SETUP" || ! -f "$SIM_NODE" ]]; then
-  echo "错误: 缺少编译产物，请运行:"
-  echo "  $0 --build"
+  echo "错误: 缺少编译产物，请先编译:"
+  echo "  source scripts/env.sh && cd ros2_ws && colcon build --symlink-install"
   exit 1
 fi
-if [[ "$AGENT_CPP_MODE" -eq 1 && ! -f "$AGENT_CPP_NODE" ]]; then
-  echo "错误: 缺少 C++ agent_node，请运行:"
-  echo "  $0 --agent-cpp --build"
+if [[ "$TELEOP_MODE" -eq 1 && ! -f "$CTL_NODE" ]]; then
+  echo "错误: 缺少 controller_node，请先编译 chassis_controller"
   exit 1
-elif [[ "$AGENT_MODE" -eq 1 && ! -f "$AGENT_NODE" ]]; then
-  echo "错误: 缺少 agent_node，请运行:"
-  echo "  $0 --build"
-  exit 1
-elif [[ "$AGENT_MODE" -eq 0 && "$AGENT_CPP_MODE" -eq 0 && ! -f "$CTL_NODE" ]]; then
-  echo "错误: 缺少 controller_node，请运行:"
-  echo "  $0 --build"
+elif [[ "$TELEOP_MODE" -eq 0 && ! -f "$AGENT_CPP_NODE" ]]; then
+  echo "错误: 缺少 C++ agent_node，请先编译 chassis_agent_cpp"
   exit 1
 fi
 
@@ -208,43 +180,36 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "============================================================"
-if [[ "$AGENT_CPP_MODE" -eq 1 ]]; then
-  echo "一键启动 HIL 演示（C++ Agent 模式 / M3 FSM）"
-  echo "  本终端: chassis_agent_cpp/agent_node"
-  echo "  后台:   simulation_node（MuJoCo 3D 窗口）"
-  echo ""
-  echo "  任务: NAV → REACH → 夹爪 → 倒车（M5 后箱子会随动）"
-  echo "  按 Ctrl+C 退出"
-elif [[ "$AGENT_MODE" -eq 1 ]]; then
-  echo "一键启动 HIL 演示（Python Agent 模式）"
-  echo "  本终端: agent_node 自主导航"
-  echo "  后台:   simulation_node（MuJoCo 3D 窗口）"
-  echo ""
-  echo "  目标: 导航到红箱 (2.5, 0)，到位后切换 ARM_REACH"
-  echo "  按 Ctrl+C 退出"
-else
-  echo "一键启动 HIL 演示"
-  echo "  本终端: controller_node 键盘遥控"
+if [[ "$TELEOP_MODE" -eq 1 ]]; then
+  echo "一键启动 HIL 演示（键盘遥控）"
+  echo "  本终端: controller_node"
   echo "  后台:   simulation_node（MuJoCo 3D 窗口）"
   echo ""
   echo "  底盘: w/s 前进后退  a/d 转向  c 回正  空格 停  b 急停"
   echo "  机械臂: i/k 肩升降  j/l 肘左右  u/o 腕俯仰  g 夹爪  q 退出"
+else
+  echo "一键启动 HIL 演示（推红箱 / C++ Agent）"
+  echo "  本终端: chassis_agent_cpp/agent_node"
+  echo "  后台:   simulation_node（MuJoCo 3D 窗口）"
+  echo ""
+  echo "  流程: 导航 → 伸臂 → 夹爪 → 倒车推箱（≥ 0.2 m）"
+  echo "  按 Ctrl+C 退出"
 fi
 echo "------------------------------------------------------------"
 echo "日志目录（退出后自动删除）:"
 echo "  ${SIM_LOG}"
-if [[ "$AGENT_MODE" -eq 1 || "$AGENT_CPP_MODE" -eq 1 ]]; then
-  echo "  ${AGENT_LOG}"
-else
+if [[ "$TELEOP_MODE" -eq 1 ]]; then
   echo "  ${CTL_LOG}"
+else
+  echo "  ${AGENT_LOG}"
 fi
 echo ""
 echo "另开终端查看日志，例如:"
 echo "  tail -f ${SIM_LOG}"
-if [[ "$AGENT_MODE" -eq 1 || "$AGENT_CPP_MODE" -eq 1 ]]; then
-  echo "  tail -f ${AGENT_LOG}"
-else
+if [[ "$TELEOP_MODE" -eq 1 ]]; then
   echo "  tail -f ${CTL_LOG}"
+else
+  echo "  tail -f ${AGENT_LOG}"
 fi
 echo "============================================================"
 echo ""
@@ -260,16 +225,12 @@ if ! kill -0 "${SIM_PID}" 2>/dev/null; then
 fi
 
 echo "simulation_node 已启动 (pid ${SIM_PID})"
-if [[ "$AGENT_CPP_MODE" -eq 1 ]]; then
-  echo "C++ agent_node 运行中...（输出写入 ${AGENT_LOG}）"
-  echo ""
-  ros2 run chassis_agent_cpp agent_node >>"${AGENT_LOG}" 2>&1
-elif [[ "$AGENT_MODE" -eq 1 ]]; then
-  echo "agent_node 运行中...（输出写入 ${AGENT_LOG}）"
-  echo ""
-  ros2 run chassis_agent agent_node >>"${AGENT_LOG}" 2>&1
-else
+if [[ "$TELEOP_MODE" -eq 1 ]]; then
   echo "controller_node 遥控中...（输出写入 ${CTL_LOG}）"
   echo ""
   ros2 run chassis_controller controller_node >>"${CTL_LOG}" 2>&1
+else
+  echo "C++ agent_node 运行中...（输出写入 ${AGENT_LOG}）"
+  echo ""
+  ros2 run chassis_agent_cpp agent_node >>"${AGENT_LOG}" 2>&1
 fi
