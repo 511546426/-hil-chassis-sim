@@ -41,6 +41,18 @@ embodied_core::RuleBrain::Config rule_brain_config_from_node(rclcpp::Node &node)
   return cfg;
 }
 
+embodied_core::TaskGoal rl_task_goal_from_node(rclcpp::Node &node) {
+  const double standoff = node.get_parameter("standoff").as_double();
+  const std::string task = node.get_parameter("task").as_string();
+  if (task == "nav_to_box_red" || task == "box_red") {
+    return embodied_core::TaskGoal::nav_to_object("box_red", standoff);
+  }
+  if (task == "push_red_box") {
+    return embodied_core::TaskGoal::push_red_box();
+  }
+  return embodied_core::TaskGoal::nav_to_object("box_red", standoff);
+}
+
 std::unique_ptr<embodied_core::Brain> make_brain(
     rclcpp::Node &node,
     const embodied_core::RuleBrain::Config &rule_cfg) {
@@ -58,7 +70,8 @@ std::unique_ptr<embodied_core::Brain> make_brain(
     }
     embodied_policy_cpp::RLBrain::Config rl_cfg;
     rl_cfg.policy_path = policy_path;
-    rl_cfg.goal = embodied_core::TaskGoal::point(2.5, 0.0);
+    rl_cfg.goal = rl_task_goal_from_node(node);
+    rl_cfg.arrive_dist = node.get_parameter("arrive_dist").as_double();
     auto brain = std::make_unique<embodied_policy_cpp::RLBrain>(rl_cfg);
     brain->reset(rl_cfg.goal);
     return brain;
@@ -77,6 +90,7 @@ class AgentNode : public rclcpp::Node {
   AgentNode() : Node("agent_node_cpp") {
     declare_parameter("brain", "rule");
     declare_parameter("policy", "");
+    declare_parameter("task", "nav_to_box_red");
     declare_parameter("standoff", kDefaultStandoff);
     declare_parameter("arrive_dist", kDefaultArriveDist);
 
@@ -92,14 +106,20 @@ class AgentNode : public rclcpp::Node {
     } else if (brain_type == "rl") {
       RCLCPP_INFO(
           get_logger(),
-          "  任务: RL 导航（ONNX policy=%s）",
+          "  任务: RL 导航到 %s（task=%s standoff=%.2f arrive=%.2f policy=%s）",
+          rl_task_goal_from_node(*this).object_name.c_str(),
+          get_parameter("task").as_string().c_str(),
+          get_parameter("standoff").as_double(),
+          get_parameter("arrive_dist").as_double(),
           get_parameter("policy").as_string().c_str());
     }
-    RCLCPP_INFO(
-        get_logger(),
-        "  standoff=%.2f m  arrive_dist=%.2f m",
-        rule_cfg.standoff,
-        rule_cfg.arrive_dist);
+    if (brain_type == "rule") {
+      RCLCPP_INFO(
+          get_logger(),
+          "  standoff=%.2f m  arrive_dist=%.2f m",
+          rule_cfg.standoff,
+          rule_cfg.arrive_dist);
+    }
 
     sub_world_ = create_subscription<EmbodiedWorldState>(
         "/world_state", 10,

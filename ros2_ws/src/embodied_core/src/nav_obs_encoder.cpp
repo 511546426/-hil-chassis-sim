@@ -89,4 +89,17 @@ NavObservation encode_nav_obs(const WorldView &world, const TaskGoal &goal) {
   return obs;
 }
 
+double nav_goal_distance(const WorldView &world, const TaskGoal &goal) {
+  double target_x = 0.0;
+  double target_y = 0.0;
+  if (!resolve_goal_xy(world, goal, target_x, target_y)) {
+    target_x = goal.x;
+    target_y = goal.y;
+  }
+  apply_standoff(world, goal.standoff, target_x, target_y);
+  const double wx = target_x - world.base_x;
+  const double wy = target_y - world.base_y;
+  return std::hypot(wx, wy);
+}
+
 }  // namespace embodied_core

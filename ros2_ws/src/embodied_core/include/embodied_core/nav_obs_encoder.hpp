@@ -15,4 +15,9 @@ using NavObservation = std::array<double, kNavObsDim>;
     const WorldView &world,
     const TaskGoal &goal);
 
+/// standoff 后的有效目标距离 [m]（与 encode_nav_obs 中 dist 一致）
+[[nodiscard]] double nav_goal_distance(
+    const WorldView &world,
+    const TaskGoal &goal);
+
 }  // namespace embodied_core

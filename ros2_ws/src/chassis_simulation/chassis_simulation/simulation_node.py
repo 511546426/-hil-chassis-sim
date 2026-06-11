@@ -230,6 +230,37 @@ def _use_curses() -> bool:
     return sys.stdin.isatty() and sys.stdout.isatty() and os.environ.get('TERM', '') not in ('', 'dumb')
 
 
+def _run_headless(node: SimulationNode) -> None:
+    global _shutdown_requested
+    _shutdown_requested = False
+    _install_signal_handlers()
+
+    step = 0
+    t = node.tracker
+    initialize_robot_pose(model, data)
+    node.get_logger().info('simulation_node headless 模式（无 3D 窗口）')
+
+    next_frame = time.monotonic()
+    while rclpy.ok() and not _shutdown_requested:
+        rclpy.spin_once(node, timeout_sec=0.0)
+
+        vx, omega, arm, grip = t.step(TIMESTEP)
+        step_embodied_kinematic(
+            model, data, t, TIMESTEP, arm, vx, omega, node.virtual_grasp
+        )
+
+        if step > 0 and step % _LOG_EVERY_STEPS == 0:
+            node.log_status(step)
+
+        step += 1
+        next_frame += TIMESTEP
+        sleep_for = next_frame - time.monotonic()
+        if sleep_for > 0.0 and not _interruptible_sleep(sleep_for):
+            break
+
+    node.get_logger().info('simulation_node 已退出')
+
+
 def _run_loop(node: SimulationNode, stdscr=None) -> None:
     global _shutdown_requested
     _shutdown_requested = False
@@ -310,7 +341,10 @@ def _run_log_only() -> None:
     rclpy.init()
     node = SimulationNode()
     try:
-        _run_loop(node, stdscr=None)
+        if os.environ.get('SIMULATION_HEADLESS', '').lower() in ('1', 'true', 'yes'):
+            _run_headless(node)
+        else:
+            _run_loop(node, stdscr=None)
     finally:
         node.destroy_node()
         rclpy.shutdown()

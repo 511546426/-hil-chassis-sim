@@ -33,6 +33,16 @@ struct TaskGoal {
     goal.y = py;
     return goal;
   }
+
+  [[nodiscard]] static TaskGoal nav_to_object(
+      const std::string &object_name,
+      double standoff = 0.35) {
+    TaskGoal goal;
+    goal.kind = TaskGoalKind::Object;
+    goal.object_name = object_name;
+    goal.standoff = standoff;
+    return goal;
+  }
 };
 
 }  // namespace embodied_core

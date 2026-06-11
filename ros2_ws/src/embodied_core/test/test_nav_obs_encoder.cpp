@@ -66,3 +66,15 @@ TEST(NavObsEncoderTest, snapshot_values_fixed) {
   EXPECT_NEAR(obs[kObsGoalDy], 1.0 / kNavObsGoalScale, 1e-9);
   EXPECT_NEAR(obs[kObsDistGoal], std::hypot(2.0, 1.0) / kNavObsGoalScale, 1e-9);
 }
+
+TEST(NavObsEncoderTest, nav_goal_distance_with_standoff) {
+  WorldView world;
+  world.base_x = 0.0;
+  world.base_y = 0.0;
+  world.objects.push_back(ObjectPose{"box_red", 2.5, 0.0, 0.18});
+
+  TaskGoal goal = TaskGoal::nav_to_object("box_red", 0.35);
+  const double dist = nav_goal_distance(world, goal);
+  EXPECT_NEAR(dist, 2.15, 1e-9);
+  EXPECT_NEAR(dist / kNavObsGoalScale, encode_nav_obs(world, goal)[kObsDistGoal], 1e-9);
+}
