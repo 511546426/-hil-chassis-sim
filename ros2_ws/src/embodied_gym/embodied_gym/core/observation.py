@@ -66,6 +66,33 @@ def _resolve_goal_xy(
     return goal_x, goal_y
 
 
+def effective_goal_xy(
+    *,
+    base_x: float,
+    base_y: float,
+    goal_x: float,
+    goal_y: float,
+    goal_kind: str = 'point',
+    object_name: str = 'box_red',
+    standoff: float = 0.0,
+    objects: dict[str, tuple[float, float, float]] | None = None,
+) -> tuple[float, float, float]:
+    """返回 standoff 后的目标 (tx, ty) 与到该目标的距离。"""
+    objects = objects or {}
+    tx, ty = _resolve_goal_xy(
+        base_x, base_y, goal_kind, goal_x, goal_y, object_name, objects
+    )
+    dx = tx - base_x
+    dy = ty - base_y
+    dist = math.hypot(dx, dy)
+    if standoff > 0.0 and dist > standoff:
+        scale = (dist - standoff) / dist
+        tx = base_x + dx * scale
+        ty = base_y + dy * scale
+        dist = math.hypot(tx - base_x, ty - base_y)
+    return tx, ty, dist
+
+
 def encode_nav_obs(
     *,
     base_x: float,

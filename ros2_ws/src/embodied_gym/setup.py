@@ -10,11 +10,10 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools'],
+    install_requires=['setuptools', 'numpy', 'gymnasium', 'stable-baselines3', 'pyyaml'],
     zip_safe=True,
     maintainer='changwei',
     maintainer_email='changwei@example.com',
     description='Gymnasium environments for embodied RL training',
     license='Apache-2.0',
-    tests_require=['pytest'],
 )

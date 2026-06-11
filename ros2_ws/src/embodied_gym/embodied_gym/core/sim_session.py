@@ -52,7 +52,27 @@ class SimSession:
         self.reset()
 
     def reset(self) -> SimState:
+        return self.reset_episode()
+
+    def reset_episode(
+        self,
+        *,
+        base_x: float = 0.0,
+        base_y: float = 0.0,
+        base_yaw: float = 0.0,
+    ) -> SimState:
         initialize_robot_pose(self.model, self.data)
+        for jname, val in (
+            ('slide_x', base_x),
+            ('slide_y', base_y),
+            ('hinge_z', base_yaw),
+        ):
+            jid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, jname)
+            if jid >= 0:
+                self.data.qpos[self.model.jnt_qposadr[jid]] = val
+        self.data.qvel[:] = 0.0
+        mujoco.mj_forward(self.model, self.data)
+
         self.tracker = EmbodiedTracker(
             max_linear_accel=self.tracker.max_linear_accel,
             max_linear_decel=self.tracker.max_linear_decel,

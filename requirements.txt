@@ -3,9 +3,11 @@ mujoco>=3.0
 numpy>=1.24
 glfw>=2.5
 
-# 强化学习入门（cartpole_train.py）
+# 强化学习入门（cartpole_train.py）+ P3 导航训练
 gymnasium>=0.29
 stable-baselines3>=2.0
+pyyaml>=6.0
+tensorboard>=2.14
 
 # ROS 2 Python 节点（conda embodied 环境）
 # rclpy 由 ROS 2 系统包提供，需 source /opt/ros/lyrical/setup.bash
