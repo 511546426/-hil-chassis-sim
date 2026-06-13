@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import math
 import sys
+import time
 from dataclasses import dataclass
 
 import rclpy
@@ -36,6 +37,8 @@ class EpisodeMetrics:
     nav_dist: float | None = None
     box_push_dist: float = 0.0
     stuck_steps: int = 0
+    elapsed_sec: float = 0.0
+    collision: bool = False
 
 
 class HilEpisodeMonitor(Node):
@@ -57,6 +60,7 @@ class HilEpisodeMonitor(Node):
         self.max_steps = max_steps
         self.object_name = object_name
         self.metrics = EpisodeMetrics()
+        self._started_at = time.monotonic()
         self._box_x0: float | None = None
         self._box_y0: float | None = None
         self._done = False
@@ -153,14 +157,20 @@ def main() -> int:
                 break
     finally:
         metrics = node.metrics
+        started_at = node._started_at
         node.destroy_node()
         rclpy.shutdown()
 
     dist_text = f'{metrics.nav_dist:.3f}' if metrics.nav_dist is not None else 'N/A'
+    metrics.elapsed_sec = time.monotonic() - started_at
+    metrics.collision = (
+        not metrics.success and metrics.stuck_steps >= 100
+    )
     print(
         f'steps={metrics.steps} success={metrics.success} '
+        f'elapsed_sec={metrics.elapsed_sec:.2f} '
         f'nav_dist={dist_text} box_push={metrics.box_push_dist:.3f} '
-        f'stuck_steps={metrics.stuck_steps}'
+        f'stuck_steps={metrics.stuck_steps} collision={metrics.collision}'
     )
     return 0 if metrics.success else 1
 

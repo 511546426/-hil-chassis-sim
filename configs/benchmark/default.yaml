@@ -1,0 +1,49 @@
+# P3-C3-3：HIL 批量评估套件
+default_policy: runs/nav_ppo/full/nav_policy.onnx
+default_episodes: 3
+
+suites:
+  core:
+    description: Rule / hybrid / RL baseline (direct brain selection)
+    episodes: 3
+    scenarios:
+      - name: rule_push
+        brain: rule
+        mode: push
+        task: push_red_box
+      - name: hybrid_push
+        brain: hybrid
+        mode: push
+        task: push_red_box
+      - name: rl_nav
+        brain: rl
+        mode: nav
+        task: nav_to_box_red
+
+  planner_auto:
+    description: Planner + brain=auto (C2 end-to-end)
+    episodes: 2
+    scenarios:
+      - name: auto_push
+        brain: auto
+        mode: push
+        planner_backend: llm_mock
+        task_text: 帮我把红箱子推远一点
+      - name: auto_nav
+        brain: auto
+        mode: nav
+        planner_backend: llm_mock
+        task_text: please go to the red box
+
+  quick:
+    description: Fast smoke — 1 episode per scenario
+    episodes: 1
+    scenarios:
+      - name: rule_push
+        brain: rule
+        mode: push
+      - name: auto_push
+        brain: auto
+        mode: push
+        planner_backend: llm_mock
+        task_text: 推红箱
