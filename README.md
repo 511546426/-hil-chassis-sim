@@ -60,6 +60,15 @@ source scripts/env.sh
 ./scripts/hil_demo.sh --help
 ```
 
+**Planner + brain=auto（自然语言任务，一键）：**
+```bash
+./scripts/hil_demo_planner.sh --interactive          # 推荐：本终端 REPL 发任务
+./scripts/hil_demo_planner.sh --task "推红箱"        # 发一条后 tail 日志
+PLANNER_BACKEND=llm_mock ./scripts/hil_demo_planner.sh --interactive
+```
+
+REPL 命令：`推红箱` / `去红箱` 直接发送，`reset` 复位，`quit` 退出。
+
 Headless 快速验收（无 3D 窗口）：
 
 ```bash
