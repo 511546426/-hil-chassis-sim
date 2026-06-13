@@ -22,6 +22,7 @@ class LlmMockPlannerTest(unittest.TestCase):
         plan = planner.plan('帮我把红箱子推远一点')
         self.assertEqual(plan.source, 'llm_mock')
         self.assertEqual(plan.goals[0].kind, 2)
+        self.assertEqual(plan.recommended_brain, 'rule')
 
     def test_nav_paraphrase(self) -> None:
         planner = LlmMockPlanner()
@@ -29,6 +30,7 @@ class LlmMockPlannerTest(unittest.TestCase):
         self.assertEqual(plan.source, 'llm_mock')
         self.assertEqual(plan.goals[0].kind, 1)
         self.assertEqual(plan.goals[0].object_name, 'box_red')
+        self.assertEqual(plan.recommended_brain, 'rl')
 
     def test_unknown_rejected(self) -> None:
         planner = LlmMockPlanner()

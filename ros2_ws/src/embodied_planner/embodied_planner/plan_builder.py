@@ -31,5 +31,13 @@ def plan_from_template(
     plan.header.frame_id = frame_id
     plan.source = source
     plan.raw_text = raw_text or template.id
+    plan.recommended_brain = template.recommended_brain
     plan.goals = [goal_from_template(g) for g in template.goals]
     return plan
+
+
+def infer_recommended_brain(goal: EmbodiedGoal) -> str:
+    """Fallback when plan.recommended_brain is empty."""
+    if goal.kind == EmbodiedGoal.PUSH_RED_BOX:
+        return 'rule'
+    return 'rl'

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# P3-C2：Planner + agent 冒烟 — send_task 推红箱
+# P3-C2：Planner + agent(brain=auto) 冒烟 — send_task 推红箱
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -10,6 +10,9 @@ WS_DIR="$PROJECT_ROOT/ros2_ws"
 SIM_NODE="$WS_DIR/install/chassis_simulation/lib/chassis_simulation/simulation_node"
 MONITOR="$PROJECT_ROOT/scripts/eval_hybrid_hil_monitor.py"
 SEND_TASK="$PROJECT_ROOT/scripts/send_task.py"
+
+AGENT_BRAIN="${AGENT_BRAIN:-auto}"
+POLICY="${POLICY:-$PROJECT_ROOT/runs/nav_ppo/full/nav_policy.onnx}"
 
 LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/eval_planner_hil.XXXXXX")"
 SIM_PID=""
@@ -52,8 +55,13 @@ ros2 run embodied_planner task_planner_node --ros-args \
 PLANNER_PID=$!
 sleep 1
 
-echo "==> 启动 agent_node (brain=rule)"
-ros2 run chassis_agent_cpp agent_node --ros-args -p brain:=rule \
+AGENT_ARGS=(-p "brain:=$AGENT_BRAIN")
+if [[ "$AGENT_BRAIN" == "auto" || "$AGENT_BRAIN" == "rl" || "$AGENT_BRAIN" == "hybrid" ]]; then
+  AGENT_ARGS+=(-p "policy:=$POLICY")
+fi
+
+echo "==> 启动 agent_node (brain=$AGENT_BRAIN)"
+ros2 run chassis_agent_cpp agent_node --ros-args "${AGENT_ARGS[@]}" \
   >"$LOG_DIR/agent.log" 2>&1 &
 AGENT_PID=$!
 sleep 2
@@ -68,7 +76,7 @@ RC=$?
 set -e
 
 if [[ "$RC" -eq 0 ]]; then
-  echo "P3-C2 PASS"
+  echo "P3-C2 PASS (brain=$AGENT_BRAIN)"
 else
   echo "P3-C2 FAIL"
   tail -20 "$LOG_DIR/agent.log" || true

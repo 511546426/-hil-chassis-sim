@@ -2,4 +2,5 @@
 std_msgs/Header header
 string source
 string raw_text
+string recommended_brain
 EmbodiedGoal[] goals

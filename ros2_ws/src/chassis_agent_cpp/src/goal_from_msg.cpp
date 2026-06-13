@@ -52,7 +52,28 @@ EmbodiedGoal msg_from_task_goal(const TaskGoal &goal) {
   msg.y = goal.y;
   msg.object_name = goal.object_name;
   msg.standoff = goal.standoff;
-  return msg;
+    return msg;
+}
+
+std::string infer_recommended_brain(
+    const EmbodiedGoal &goal,
+    const std::string &auto_push_brain) {
+  if (goal.kind == EmbodiedGoal::PUSH_RED_BOX) {
+    return auto_push_brain;
+  }
+  return "rl";
+}
+
+std::string resolve_recommended_brain(
+    const embodied_msgs::msg::EmbodiedTaskPlan &plan,
+    const std::string &auto_push_brain) {
+  if (!plan.recommended_brain.empty()) {
+    return plan.recommended_brain;
+  }
+  if (plan.goals.empty()) {
+    return auto_push_brain;
+  }
+  return infer_recommended_brain(plan.goals.front(), auto_push_brain);
 }
 
 }  // namespace chassis_agent_cpp

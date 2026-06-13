@@ -55,13 +55,30 @@ class TaskSender(Node):
     def send_direct(self, text: str) -> EmbodiedTaskPlan:
         plan = self._planner.plan(text)
         plan.header.stamp = self.get_clock().now().to_msg()
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            if self._pub_plan.get_subscription_count() > 0:
+                break
+            rclpy.spin_once(self, timeout_sec=0.1)
         self._pub_plan.publish(plan)
+        end = time.monotonic() + 0.5
+        while time.monotonic() < end:
+            rclpy.spin_once(self, timeout_sec=0.05)
         return plan
 
     def send_request(self, text: str) -> None:
         msg = String()
         msg.data = text
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            if self._pub_request.get_subscription_count() > 0:
+                break
+            rclpy.spin_once(self, timeout_sec=0.1)
         self._pub_request.publish(msg)
+        # Allow reliable delivery before shutdown.
+        end = time.monotonic() + 0.5
+        while time.monotonic() < end:
+            rclpy.spin_once(self, timeout_sec=0.05)
 
 
 def main() -> int:
@@ -73,14 +90,7 @@ def main() -> int:
     try:
         if args.direct:
             plan = node.send_direct(args.text)
-            template = None
-            try:
-                from embodied_planner.templates import match_template
-
-                template = match_template(args.text)
-            except Exception:
-                pass
-            brain = template.recommended_brain if template else 'rule'
+            brain = plan.recommended_brain or 'rule'
             print(
                 f'Published /task_plan goals={len(plan.goals)} '
                 f'recommended_brain={brain} raw={plan.raw_text!r}'

@@ -3,6 +3,7 @@
  *
  * 数据流：
  *   sub /world_state  →  WorldView  →  Brain  →  /control_cmd
+ *   sub /task_plan    →  brain=auto 时按 recommended_brain 切换
  */
 
 #include <memory>
@@ -10,6 +11,7 @@
 #include <string>
 
 #include <embodied_msgs/msg/embodied_command.hpp>
+#include <embodied_msgs/msg/embodied_goal.hpp>
 #include <embodied_msgs/msg/embodied_world_state.hpp>
 #include <embodied_msgs/msg/embodied_task_plan.hpp>
 #include <embodied_msgs/srv/reset_episode.hpp>
@@ -71,12 +73,10 @@ embodied_core::TaskGoal agent_task_goal_from_node(
 
 std::unique_ptr<embodied_core::Brain> make_brain(
     rclcpp::Node &node,
-    const embodied_core::RuleBrain::Config &rule_cfg) {
-  const std::string brain_type = node.get_parameter("brain").as_string();
+    const embodied_core::RuleBrain::Config &rule_cfg,
+    const std::string &brain_type) {
   if (brain_type == "rule") {
-    auto brain = std::make_unique<embodied_core::RuleBrain>(rule_cfg);
-    brain->reset(embodied_core::TaskGoal::push_red_box());
-    return brain;
+    return std::make_unique<embodied_core::RuleBrain>(rule_cfg);
   }
   if (brain_type == "rl") {
     const std::string policy_path = node.get_parameter("policy").as_string();
@@ -88,9 +88,7 @@ std::unique_ptr<embodied_core::Brain> make_brain(
     rl_cfg.policy_path = policy_path;
     rl_cfg.goal = rl_task_goal_from_node(node);
     rl_cfg.arrive_dist = node.get_parameter("arrive_dist").as_double();
-    auto brain = std::make_unique<embodied_policy_cpp::RLBrain>(rl_cfg);
-    brain->reset(rl_cfg.goal);
-    return brain;
+    return std::make_unique<embodied_policy_cpp::RLBrain>(rl_cfg);
   }
   if (brain_type == "hybrid") {
     const std::string policy_path = node.get_parameter("policy").as_string();
@@ -106,13 +104,11 @@ std::unique_ptr<embodied_core::Brain> make_brain(
         "box_red", node.get_parameter("standoff").as_double());
     hybrid_cfg.rl.arrive_dist = node.get_parameter("arrive_dist").as_double();
     hybrid_cfg.fsm = rule_cfg.fsm;
-    auto brain = std::make_unique<embodied_policy_cpp::HybridBrain>(hybrid_cfg);
-    brain->reset(embodied_core::TaskGoal::push_red_box());
-    return brain;
+    return std::make_unique<embodied_policy_cpp::HybridBrain>(hybrid_cfg);
   }
   RCLCPP_FATAL(
       node.get_logger(),
-      "未知 brain 类型: %s（支持: rule, rl, hybrid）",
+      "未知 brain 类型: %s（支持: rule, rl, hybrid, auto）",
       brain_type.c_str());
   throw std::runtime_error("unknown brain type");
 }
@@ -128,37 +124,25 @@ class AgentNode : public rclcpp::Node {
     declare_parameter("standoff", kDefaultStandoff);
     declare_parameter("arrive_dist", kDefaultArriveDist);
     declare_parameter("listen_task_plan", true);
+    declare_parameter("auto_push_brain", "rule");
 
-    const auto rule_cfg = rule_brain_config_from_node(*this);
-    const std::string brain_type = get_parameter("brain").as_string();
-    task_goal_ = agent_task_goal_from_node(*this, brain_type);
-    brain_ = make_brain(*this, rule_cfg);
-    RCLCPP_INFO(get_logger(), "C++ agent_node 已启动（brain=%s）", brain_type.c_str());
-    if (brain_type == "rule") {
+    rule_cfg_ = rule_brain_config_from_node(*this);
+    brain_mode_ = get_parameter("brain").as_string();
+    auto_push_brain_ = get_parameter("auto_push_brain").as_string();
+
+    if (brain_mode_ == "auto") {
       RCLCPP_INFO(
           get_logger(),
-          "  任务: NAV → REACH → 夹爪 → 倒车推箱（≥ 0.2 m）");
-    } else if (brain_type == "rl") {
+          "C++ agent_node 已启动（brain=auto，等待 /task_plan）");
       RCLCPP_INFO(
           get_logger(),
-          "  任务: RL 导航到 %s（task=%s standoff=%.2f arrive=%.2f policy=%s）",
-          rl_task_goal_from_node(*this).object_name.c_str(),
-          get_parameter("task").as_string().c_str(),
-          get_parameter("standoff").as_double(),
-          get_parameter("arrive_dist").as_double(),
+          "  auto_push_brain=%s  policy=%s",
+          auto_push_brain_.c_str(),
           get_parameter("policy").as_string().c_str());
-    } else if (brain_type == "hybrid") {
-      RCLCPP_INFO(
-          get_logger(),
-          "  任务: Hybrid 推红箱（RL 导航 + Rule 操作 policy=%s）",
-          get_parameter("policy").as_string().c_str());
-    }
-    if (brain_type == "rule") {
-      RCLCPP_INFO(
-          get_logger(),
-          "  standoff=%.2f m  arrive_dist=%.2f m",
-          rule_cfg.standoff,
-          rule_cfg.arrive_dist);
+    } else {
+      task_goal_ = agent_task_goal_from_node(*this, brain_mode_);
+      activate_brain(brain_mode_, task_goal_);
+      log_brain_startup(brain_mode_);
     }
 
     sub_world_ = create_subscription<EmbodiedWorldState>(
@@ -189,10 +173,47 @@ class AgentNode : public rclcpp::Node {
   }
 
  private:
+  void log_brain_startup(const std::string &brain_type) {
+    RCLCPP_INFO(get_logger(), "C++ agent_node 已激活（brain=%s）", brain_type.c_str());
+    if (brain_type == "rule") {
+      RCLCPP_INFO(
+          get_logger(),
+          "  任务: NAV → REACH → 夹爪 → 倒车推箱（≥ 0.2 m）");
+      RCLCPP_INFO(
+          get_logger(),
+          "  standoff=%.2f m  arrive_dist=%.2f m",
+          rule_cfg_.standoff,
+          rule_cfg_.arrive_dist);
+    } else if (brain_type == "rl") {
+      RCLCPP_INFO(
+          get_logger(),
+          "  任务: RL 导航（policy=%s）",
+          get_parameter("policy").as_string().c_str());
+    } else if (brain_type == "hybrid") {
+      RCLCPP_INFO(
+          get_logger(),
+          "  任务: Hybrid 推红箱（policy=%s）",
+          get_parameter("policy").as_string().c_str());
+    }
+  }
+
+  void activate_brain(
+      const std::string &brain_type,
+      const embodied_core::TaskGoal &goal) {
+    if (brain_type != active_brain_type_ || !brain_) {
+      brain_ = make_brain(*this, rule_cfg_, brain_type);
+      active_brain_type_ = brain_type;
+      log_brain_startup(brain_type);
+    }
+    task_goal_ = goal;
+    brain_->reset(task_goal_);
+    last_cmd_log_.clear();
+  }
+
   void reset_brain_episode(const ResetEpisode::Response::SharedPtr &response) {
     if (!brain_) {
       response->success = false;
-      response->message = "brain not initialized";
+      response->message = "brain not initialized (waiting for /task_plan?)";
       return;
     }
     brain_->reset(task_goal_);
@@ -207,18 +228,22 @@ class AgentNode : public rclcpp::Node {
       RCLCPP_WARN(get_logger(), "忽略空 TaskPlan source=%s", plan.source.c_str());
       return;
     }
-    if (!brain_) {
-      RCLCPP_WARN(get_logger(), "brain 未就绪，忽略 TaskPlan");
-      return;
+    const embodied_core::TaskGoal goal =
+        chassis_agent_cpp::task_goal_from_msg(plan.goals.front());
+
+    std::string brain_type = brain_mode_;
+    if (brain_mode_ == "auto") {
+      brain_type = chassis_agent_cpp::resolve_recommended_brain(
+          plan, auto_push_brain_);
     }
-    task_goal_ = chassis_agent_cpp::task_goal_from_msg(plan.goals.front());
-    brain_->reset(task_goal_);
-    last_cmd_log_.clear();
+
+    activate_brain(brain_type, goal);
     RCLCPP_INFO(
         get_logger(),
-        "TaskPlan 已应用 source=%s raw=%s goals=%zu",
+        "TaskPlan 已应用 source=%s raw=%s brain=%s goals=%zu",
         plan.source.c_str(),
         plan.raw_text.c_str(),
+        brain_type.c_str(),
         plan.goals.size());
   }
 
@@ -263,7 +288,7 @@ class AgentNode : public rclcpp::Node {
   }
 
   void log_cmd_throttled(const embodied_core::SkillOutput &out) {
-    const std::string phase = brain_ ? brain_->phase_name() : "N/A";
+    const std::string phase = brain_ ? brain_->phase_name() : "Idle";
     const std::string summary =
         std::string("phase=") + phase +
         " base[vx=" + std::to_string(out.target_linear_x) +
@@ -308,6 +333,11 @@ class AgentNode : public rclcpp::Node {
           }
         });
   }
+
+  embodied_core::RuleBrain::Config rule_cfg_{};
+  std::string brain_mode_;
+  std::string auto_push_brain_;
+  std::string active_brain_type_;
 
   std::unique_ptr<embodied_core::Brain> brain_;
   embodied_core::TaskGoal task_goal_{embodied_core::TaskGoal::push_red_box()};

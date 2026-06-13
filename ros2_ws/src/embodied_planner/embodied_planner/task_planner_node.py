@@ -64,7 +64,8 @@ class TaskPlannerNode(Node):
         plan.header.stamp = self.get_clock().now().to_msg()
         self._pub_plan.publish(plan)
         self.get_logger().info(
-            f'published plan source={plan.source} goals={len(plan.goals)} raw={plan.raw_text!r}'
+            f'published plan source={plan.source} brain={plan.recommended_brain} '
+            f'goals={len(plan.goals)} raw={plan.raw_text!r}'
         )
 
 
