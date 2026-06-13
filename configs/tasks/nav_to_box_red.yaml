@@ -1,27 +1,2 @@
-name: nav_to_box_red
-max_steps: 500
-dt: 0.02
-
-goal:
-  type: object
-  object_name: box_red
-  standoff: 0.35
-
-success:
-  distance_lt: 0.30
-
-reset:
-  base: { x: 0.0, y: 0.0, yaw: 0.0 }
-  randomize:
-    base_x: [-0.5, 0.5]
-    base_y: [-0.5, 0.5]
-    base_yaw: [-0.3, 0.3]
-
-reward:
-  progress: 1.5
-  time: -0.005
-  success: 12.0
-  out_of_bounds: -10.0
-
-limits:
-  arena_half: 15.0
+# Legacy alias — loads from configs/tasks/registry.yaml (P3-C3-1)
+task_id: nav_to_box_red

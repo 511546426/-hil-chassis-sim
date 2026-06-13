@@ -1,4 +1,4 @@
-# P3-C3-3：HIL 批量评估套件
+# P3-C3-3：HIL 批量评估套件（场景引用 configs/tasks/registry.yaml）
 default_policy: runs/nav_ppo/full/nav_policy.onnx
 default_episodes: 3
 
@@ -8,30 +8,27 @@ suites:
     episodes: 3
     scenarios:
       - name: rule_push
+        task_id: push_red_box
         brain: rule
-        mode: push
-        task: push_red_box
       - name: hybrid_push
+        task_id: push_red_box
         brain: hybrid
-        mode: push
-        task: push_red_box
       - name: rl_nav
+        task_id: nav_to_box_red
         brain: rl
-        mode: nav
-        task: nav_to_box_red
 
   planner_auto:
     description: Planner + brain=auto (C2 end-to-end)
     episodes: 2
     scenarios:
       - name: auto_push
+        task_id: push_red_box
         brain: auto
-        mode: push
         planner_backend: llm_mock
         task_text: 帮我把红箱子推远一点
       - name: auto_nav
+        task_id: nav_to_box_red
         brain: auto
-        mode: nav
         planner_backend: llm_mock
         task_text: please go to the red box
 
@@ -40,10 +37,9 @@ suites:
     episodes: 1
     scenarios:
       - name: rule_push
+        task_id: push_red_box
         brain: rule
-        mode: push
       - name: auto_push
+        task_id: push_red_box
         brain: auto
-        mode: push
         planner_backend: llm_mock
-        task_text: 推红箱

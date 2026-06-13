@@ -72,9 +72,40 @@ def load_task_spec(path: str | Path) -> TaskSpec:
     spec_path = Path(path)
     if not spec_path.is_absolute():
         spec_path = _project_root() / spec_path
-    with spec_path.open(encoding='utf-8') as f:
-        raw = yaml.safe_load(f)
 
+    if spec_path.is_file():
+        with spec_path.open(encoding='utf-8') as f:
+            raw = yaml.safe_load(f) or {}
+        task_id = raw.get('task_id')
+        if task_id:
+            return load_task_spec_by_id(str(task_id))
+        return _task_spec_from_dict(raw, name=spec_path.stem)
+
+    task_id = str(path)
+    try:
+        registry = load_task_registry()
+    except Exception:
+        registry = {}
+    if task_id in registry:
+        return load_task_spec_by_id(task_id)
+
+    raise FileNotFoundError(f'task spec not found: {path}')
+
+
+def load_task_registry():
+    from chassis_common.task_registry import load_task_registry as _load
+
+    return _load()
+
+
+def load_task_spec_by_id(task_id: str) -> TaskSpec:
+    from chassis_common.task_registry import get_task_entry, gym_spec_dict
+
+    entry = get_task_entry(task_id)
+    return _task_spec_from_dict(gym_spec_dict(entry), name=entry.id)
+
+
+def _task_spec_from_dict(raw: dict, *, name: str) -> TaskSpec:
     goal_raw = raw.get('goal', {})
     reset_raw = raw.get('reset', {})
     base_raw = reset_raw.get('base', {})
@@ -82,7 +113,7 @@ def load_task_spec(path: str | Path) -> TaskSpec:
     limits_raw = raw.get('limits', {})
 
     return TaskSpec(
-        name=str(raw.get('name', spec_path.stem)),
+        name=str(raw.get('name', name)),
         max_steps=int(raw.get('max_steps', 500)),
         dt=float(raw.get('dt', 0.02)),
         goal=GoalSpec(

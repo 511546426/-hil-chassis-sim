@@ -149,6 +149,47 @@ def load_benchmark_config(path: Path) -> dict[str, Any]:
         return yaml.safe_load(fh)
 
 
+def resolve_scenario_spec(raw: dict[str, Any]) -> ScenarioSpec:
+    """Resolve benchmark scenario from registry task_id with optional overrides."""
+    from chassis_common.task_registry import load_task_registry
+
+    task_id = str(raw.get('task_id', raw.get('task', '')))
+    registry = load_task_registry()
+    entry = registry.get(task_id)
+
+    if entry is not None:
+        task_text = str(raw.get('task_text', ''))
+        if not task_text and raw.get('planner_backend'):
+            task_text = entry.default_task_text
+        return ScenarioSpec(
+            name=str(raw['name']),
+            mode=str(raw.get('mode', entry.monitor.mode)),
+            brain=str(raw.get('brain', entry.recommended_brain)),
+            task=entry.id,
+            task_text=task_text,
+            planner_backend=str(raw.get('planner_backend', '')),
+            standoff=float(raw.get('standoff', entry.monitor.standoff)),
+            arrive_dist=float(raw.get('arrive_dist', entry.monitor.arrive_dist)),
+            push_min_dist=float(raw.get('push_min_dist', entry.monitor.push_min_dist)),
+            max_steps=int(raw.get('max_steps', entry.monitor.max_steps)),
+            timeout_sec=float(raw.get('timeout_sec', entry.monitor.timeout_sec)),
+        )
+
+    return ScenarioSpec(
+        name=str(raw['name']),
+        mode=str(raw.get('mode', 'push')),
+        brain=str(raw.get('brain', 'rule')),
+        task=str(raw.get('task', '')),
+        task_text=str(raw.get('task_text', '')),
+        planner_backend=str(raw.get('planner_backend', '')),
+        standoff=float(raw.get('standoff', 0.35)),
+        arrive_dist=float(raw.get('arrive_dist', 0.30)),
+        push_min_dist=float(raw.get('push_min_dist', 0.20)),
+        max_steps=int(raw.get('max_steps', 0)),
+        timeout_sec=float(raw.get('timeout_sec', 0.0)),
+    )
+
+
 def load_suite(
     config_path: Path,
     suite_name: str,
@@ -176,19 +217,7 @@ def load_suite(
         name = str(raw['name'])
         if scenario_filter and name not in scenario_filter:
             continue
-        spec = ScenarioSpec(
-            name=name,
-            mode=str(raw.get('mode', 'push')),
-            brain=str(raw.get('brain', 'rule')),
-            task=str(raw.get('task', 'nav_to_box_red')),
-            task_text=str(raw.get('task_text', '')),
-            planner_backend=str(raw.get('planner_backend', '')),
-            standoff=float(raw.get('standoff', 0.35)),
-            arrive_dist=float(raw.get('arrive_dist', 0.30)),
-            push_min_dist=float(raw.get('push_min_dist', 0.20)),
-            max_steps=int(raw.get('max_steps', 0)),
-            timeout_sec=float(raw.get('timeout_sec', 0.0)),
-        )
+        spec = resolve_scenario_spec(raw)
         scenarios.append(
             ScenarioReport(
                 name=spec.name,
@@ -220,21 +249,7 @@ def scenario_specs_from_suite(suite: BenchmarkSuite, cfg_path: Path) -> list[Sce
     for raw in entry.get('scenarios', []):
         if raw['name'] not in names:
             continue
-        specs.append(
-            ScenarioSpec(
-                name=str(raw['name']),
-                mode=str(raw.get('mode', 'push')),
-                brain=str(raw.get('brain', 'rule')),
-                task=str(raw.get('task', 'nav_to_box_red')),
-                task_text=str(raw.get('task_text', '')),
-                planner_backend=str(raw.get('planner_backend', '')),
-                standoff=float(raw.get('standoff', 0.35)),
-                arrive_dist=float(raw.get('arrive_dist', 0.30)),
-                push_min_dist=float(raw.get('push_min_dist', 0.20)),
-                max_steps=int(raw.get('max_steps', 0)),
-                timeout_sec=float(raw.get('timeout_sec', 0.0)),
-            )
-        )
+        specs.append(resolve_scenario_spec(raw))
     return specs
 
 

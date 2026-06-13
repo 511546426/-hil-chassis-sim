@@ -1,0 +1,130 @@
+# P3-C3-1：统一 TaskSpec 注册表（planner / gym / HIL benchmark 共用）
+tasks:
+  push_red_box:
+    id: push_red_box
+    description: Push the red box backward by at least 0.2 m
+    aliases:
+      - 推红箱
+      - 推箱子
+      - push red box
+      - push the red box
+      - push box
+    recommended_brain: rule
+    monitor:
+      mode: push
+      standoff: 0.35
+      arrive_dist: 0.30
+      push_min_dist: 0.20
+      max_steps: 1500
+      timeout_sec: 45
+    planner:
+      goals:
+        - kind: PUSH_RED_BOX
+    gym:
+      max_steps: 1500
+      dt: 0.02
+      goal:
+        type: object
+        object_name: box_red
+        standoff: 0.35
+      success:
+        distance_lt: 0.30
+        push_min_dist: 0.20
+      reset:
+        base: { x: 0.0, y: 0.0, yaw: 0.0 }
+      reward:
+        progress: 1.5
+        time: -0.005
+        success: 12.0
+        push_success: 20.0
+        out_of_bounds: -10.0
+      limits:
+        arena_half: 15.0
+
+  nav_to_box_red:
+    id: nav_to_box_red
+    description: Navigate to the red box with standoff
+    aliases:
+      - 去红箱
+      - 导航到红箱
+      - go to red box
+      - navigate to red box
+      - nav to box_red
+    recommended_brain: rl
+    monitor:
+      mode: nav
+      standoff: 0.35
+      arrive_dist: 0.30
+      max_steps: 500
+      timeout_sec: 15
+    planner:
+      goals:
+        - kind: OBJECT
+          object_name: box_red
+          standoff: 0.35
+    gym:
+      max_steps: 500
+      dt: 0.02
+      goal:
+        type: object
+        object_name: box_red
+        standoff: 0.35
+      success:
+        distance_lt: 0.30
+      reset:
+        base: { x: 0.0, y: 0.0, yaw: 0.0 }
+        randomize:
+          base_x: [-0.5, 0.5]
+          base_y: [-0.5, 0.5]
+          base_yaw: [-0.3, 0.3]
+      reward:
+        progress: 1.5
+        time: -0.005
+        success: 12.0
+        out_of_bounds: -10.0
+      limits:
+        arena_half: 15.0
+
+  nav_to_point:
+    id: nav_to_point
+    description: Navigate to a fixed point in the arena
+    aliases:
+      - 去坐标
+      - go to point
+      - navigate to point
+    recommended_brain: rl
+    monitor:
+      mode: nav
+      standoff: 0.0
+      arrive_dist: 0.35
+      max_steps: 400
+      timeout_sec: 15
+    planner:
+      goals:
+        - kind: POINT
+          x: 2.5
+          y: 0.0
+    gym:
+      max_steps: 400
+      dt: 0.02
+      goal:
+        type: point
+        standoff: 0.0
+        random:
+          x: [1.5, 4.0]
+          y: [-2.0, 2.0]
+      success:
+        distance_lt: 0.35
+      reset:
+        base: { x: 0.0, y: 0.0, yaw: 0.0 }
+        randomize:
+          base_x: [-0.4, 0.4]
+          base_y: [-0.4, 0.4]
+          base_yaw: [-0.25, 0.25]
+      reward:
+        progress: 2.0
+        time: -0.005
+        success: 15.0
+        out_of_bounds: -10.0
+      limits:
+        arena_half: 15.0
