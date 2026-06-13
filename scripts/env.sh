@@ -53,4 +53,14 @@ fi
 
 export CHASSIS_PYTHON="$CONDA_PREFIX/bin/python"
 export PATH="$CONDA_PREFIX/bin:$PATH"
+
+# LLM API Key（DeepSeek / OpenAI）— 可选，planner_backend=llm 时需要
+if [[ -f "$CHASSIS_DEMO_ROOT/scripts/load_llm_key.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "$CHASSIS_DEMO_ROOT/scripts/load_llm_key.sh"
+fi
+
 echo "环境就绪: embodied + ROS lyrical ($(basename "$CHASSIS_PYTHON"))"
+if [[ -n "${DEEPSEEK_API_KEY:-}" ]]; then
+  echo "LLM Key: 已加载 DEEPSEEK_API_KEY"
+fi

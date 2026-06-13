@@ -26,5 +26,9 @@ ros2_ws/.cache/
 *.onnx.data
 runs/
 
+# LLM planner local config (may contain API keys)
+configs/planner_llm.yaml
+configs/planner_llm.local.env
+
 # OS
 .DS_Store

@@ -11,6 +11,7 @@
 
 #include <embodied_msgs/msg/embodied_command.hpp>
 #include <embodied_msgs/msg/embodied_world_state.hpp>
+#include <embodied_msgs/msg/embodied_task_plan.hpp>
 #include <embodied_msgs/srv/reset_episode.hpp>
 #include <embodied_msgs/srv/set_virtual_grasp.hpp>
 #include <embodied_core/brain.hpp>
@@ -19,13 +20,16 @@
 #include <embodied_core/task_goal.hpp>
 #include <embodied_policy_cpp/hybrid_brain.hpp>
 #include <embodied_policy_cpp/rl_brain.hpp>
+#include <rclcpp/qos.hpp>
 #include <rclcpp/rclcpp.hpp>
 
+#include "chassis_agent_cpp/goal_from_msg.hpp"
 #include "chassis_agent_cpp/world_from_msg.hpp"
 
 using namespace std::chrono_literals;
 using EmbodiedCommand = embodied_msgs::msg::EmbodiedCommand;
 using EmbodiedWorldState = embodied_msgs::msg::EmbodiedWorldState;
+using EmbodiedTaskPlan = embodied_msgs::msg::EmbodiedTaskPlan;
 using SetVirtualGrasp = embodied_msgs::srv::SetVirtualGrasp;
 using ResetEpisode = embodied_msgs::srv::ResetEpisode;
 
@@ -123,6 +127,7 @@ class AgentNode : public rclcpp::Node {
     declare_parameter("task", "nav_to_box_red");
     declare_parameter("standoff", kDefaultStandoff);
     declare_parameter("arrive_dist", kDefaultArriveDist);
+    declare_parameter("listen_task_plan", true);
 
     const auto rule_cfg = rule_brain_config_from_node(*this);
     const std::string brain_type = get_parameter("brain").as_string();
@@ -160,6 +165,16 @@ class AgentNode : public rclcpp::Node {
         "/world_state", 10,
         [this](const EmbodiedWorldState::SharedPtr msg) { on_world_state(*msg); });
 
+    if (get_parameter("listen_task_plan").as_bool()) {
+      rclcpp::QoS plan_qos(1);
+      plan_qos.transient_local();
+      sub_task_plan_ = create_subscription<EmbodiedTaskPlan>(
+          "/task_plan",
+          plan_qos,
+          [this](const EmbodiedTaskPlan::SharedPtr msg) { on_task_plan(*msg); });
+      RCLCPP_INFO(get_logger(), "  订阅 /task_plan（P3-C2 planner）");
+    }
+
     pub_cmd_ = create_publisher<EmbodiedCommand>("/control_cmd", 10);
     grasp_client_ = create_client<SetVirtualGrasp>("/sim/set_virtual_grasp");
     srv_reset_ = create_service<ResetEpisode>(
@@ -186,6 +201,27 @@ class AgentNode : public rclcpp::Node {
     response->message = "agent brain reset";
     RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
   }
+
+  void on_task_plan(const EmbodiedTaskPlan &plan) {
+    if (plan.goals.empty()) {
+      RCLCPP_WARN(get_logger(), "忽略空 TaskPlan source=%s", plan.source.c_str());
+      return;
+    }
+    if (!brain_) {
+      RCLCPP_WARN(get_logger(), "brain 未就绪，忽略 TaskPlan");
+      return;
+    }
+    task_goal_ = chassis_agent_cpp::task_goal_from_msg(plan.goals.front());
+    brain_->reset(task_goal_);
+    last_cmd_log_.clear();
+    RCLCPP_INFO(
+        get_logger(),
+        "TaskPlan 已应用 source=%s raw=%s goals=%zu",
+        plan.source.c_str(),
+        plan.raw_text.c_str(),
+        plan.goals.size());
+  }
+
   void on_world_state(const EmbodiedWorldState &msg) {
     world_ = chassis_agent_cpp::world_from_msg(msg);
     world_valid_ = true;
@@ -277,6 +313,7 @@ class AgentNode : public rclcpp::Node {
   embodied_core::TaskGoal task_goal_{embodied_core::TaskGoal::push_red_box()};
 
   rclcpp::Subscription<EmbodiedWorldState>::SharedPtr sub_world_;
+  rclcpp::Subscription<EmbodiedTaskPlan>::SharedPtr sub_task_plan_;
   rclcpp::Publisher<EmbodiedCommand>::SharedPtr pub_cmd_;
   rclcpp::Client<SetVirtualGrasp>::SharedPtr grasp_client_;
   rclcpp::Service<ResetEpisode>::SharedPtr srv_reset_;

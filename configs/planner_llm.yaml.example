@@ -1,0 +1,29 @@
+# Copy to configs/planner_llm.yaml and set API keys via environment variables.
+# Do NOT commit planner_llm.yaml with secrets.
+#
+# Key 接入: cp configs/planner_llm.local.env.example configs/planner_llm.local.env
+#           或 export DEEPSEEK_API_KEY=sk-...
+#           或 ~/.claude/settings.json (Claude Code DeepSeek)
+# 检查: python scripts/check_llm_key.py
+
+provider: openai          # openai | ollama
+model: deepseek-chat      # DeepSeek chat; or gpt-4o-mini for OpenAI
+
+openai:
+  base_url: https://api.deepseek.com/v1
+  api_key_env: DEEPSEEK_API_KEY
+  timeout_sec: 45
+
+# OpenAI official example:
+# openai:
+#   base_url: https://api.openai.com/v1
+#   api_key_env: OPENAI_API_KEY
+#   timeout_sec: 30
+
+ollama:
+  host: http://127.0.0.1:11434
+  timeout_sec: 120
+
+min_confidence: 0.5
+temperature: 0.0
+max_tokens: 256
