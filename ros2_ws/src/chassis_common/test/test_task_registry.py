@@ -41,6 +41,16 @@ class TaskRegistryTest(unittest.TestCase):
         assert entry is not None
         self.assertEqual(entry.id, 'push_red_box')
 
+    def test_match_natural_language_push(self) -> None:
+        for text in (
+            '帮我把红箱子推远一点',
+            '帮我把红箱子推得更远一点，远到机器人启动的起始位置',
+        ):
+            entry = match_task_entry(text)
+            self.assertIsNotNone(entry, msg=text)
+            assert entry is not None
+            self.assertEqual(entry.id, 'push_red_box')
+
     def test_gym_task_spec_by_id(self) -> None:
         from embodied_gym.core.task_spec import load_task_spec_by_id
 

@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 import rclpy
+from embodied_msgs.msg import EmbodiedTaskPlan
 from embodied_msgs.srv import ResetEpisode
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
@@ -24,9 +25,22 @@ def _project_root() -> Path:
 class TaskRepl(Node):
     def __init__(self) -> None:
         super().__init__('task_repl')
+        latched = QoSProfile(
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            history=HistoryPolicy.KEEP_LAST,
+        )
         self._pub = self.create_publisher(String, '/task_request', 10)
+        self._latest_plan: EmbodiedTaskPlan | None = None
+        self._plan_seq = 0
+        self.create_subscription(EmbodiedTaskPlan, '/task_plan', self._on_plan, latched)
         self._sim_reset = self.create_client(ResetEpisode, '/sim/reset_episode')
         self._agent_reset = self.create_client(ResetEpisode, '/agent/reset_episode')
+
+    def _on_plan(self, msg: EmbodiedTaskPlan) -> None:
+        self._latest_plan = msg
+        self._plan_seq += 1
 
     def wait_ready(self, timeout_sec: float = 15.0) -> bool:
         deadline = time.monotonic() + timeout_sec
@@ -36,7 +50,7 @@ class TaskRepl(Node):
             rclpy.spin_once(self, timeout_sec=0.1)
         return False
 
-    def send(self, text: str) -> bool:
+    def send(self, text: str, *, wait_plan_sec: float = 3.0) -> bool:
         msg = String()
         msg.data = text
         deadline = time.monotonic() + 5.0
@@ -47,12 +61,32 @@ class TaskRepl(Node):
         if self._pub.get_subscription_count() == 0:
             print('警告: task_planner_node 未订阅 /task_request', file=sys.stderr)
             return False
+        seq_before = self._plan_seq
         self._pub.publish(msg)
         end = time.monotonic() + 0.5
         while time.monotonic() < end:
             rclpy.spin_once(self, timeout_sec=0.05)
         print(f'→ /task_request {text!r}')
-        return True
+
+        plan_deadline = time.monotonic() + wait_plan_sec
+        while time.monotonic() < plan_deadline:
+            if self._plan_seq > seq_before and self._latest_plan is not None:
+                plan = self._latest_plan
+                if plan.raw_text == text:
+                    brain = plan.recommended_brain or 'rule'
+                    print(
+                        f'✓ /task_plan source={plan.source} brain={brain} '
+                        f'goals={len(plan.goals)}'
+                    )
+                    return True
+            rclpy.spin_once(self, timeout_sec=0.05)
+
+        print(
+            '✗ 未收到 /task_plan（planner 可能未识别该任务）\n'
+            '  可试: 推红箱 | 去红箱 | PLANNER_BACKEND=llm_mock',
+            file=sys.stderr,
+        )
+        return False
 
     def reset_episode(self) -> bool:
         req = ResetEpisode.Request()

@@ -137,6 +137,23 @@ def get_task_entry(task_id: str, registry: dict[str, TaskRegistryEntry] | None =
     return catalog[task_id]
 
 
+def _match_task_by_keywords(
+    text: str,
+    catalog: dict[str, TaskRegistryEntry],
+) -> TaskRegistryEntry | None:
+    """Lightweight NL fallback when alias/substring match fails."""
+    lowered = _normalize(text)
+    if not lowered:
+        return None
+    if 'push' in lowered or '推' in text:
+        return catalog.get('push_red_box')
+    if 'point' in lowered or '坐标' in text or '定点' in text:
+        return catalog.get('nav_to_point')
+    if 'box' in lowered or '红箱' in text or '箱子' in text:
+        return catalog.get('nav_to_box_red')
+    return None
+
+
 def match_task_entry(
     text: str,
     registry: dict[str, TaskRegistryEntry] | None = None,
@@ -158,7 +175,8 @@ def match_task_entry(
             norm_alias = _normalize(alias)
             if norm_alias in query or query in norm_alias:
                 return entry
-    return None
+
+    return _match_task_by_keywords(text, catalog)
 
 
 def gym_spec_dict(entry: TaskRegistryEntry) -> dict[str, Any]:
