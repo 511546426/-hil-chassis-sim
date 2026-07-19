@@ -17,12 +17,13 @@ public:
 
 private:
   void cmdCallback(const EmbodiedCommand::SharedPtr msg) {
-    RCLCPP_INFO(
+    RCLCPP_INFO_THROTTLE(
         get_logger(),
+        *get_clock(),
+        1000,
         "linear_x=%.3f, steering_angle=%.3f, emergency_brake=%s",
         msg->target_linear_x, msg->target_steering_angle,
-        msg->emergency_brake ? "true" : "false"
-    );
+        msg->emergency_brake ? "true" : "false");
   }
 
   rclcpp::Subscription<EmbodiedCommand>::SharedPtr subscription_;
