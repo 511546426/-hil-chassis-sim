@@ -8,16 +8,15 @@ public:
     }
 
     int counts[26] = {};
-
-    for (char character : s) {
-      ++counts[character - 'a'];
+    for (const char ch : s) {
+      ++counts[ch - 'a'];
     }
 
-    for (char character : t) {
-      --counts[character - 'a'];
+    for (const char ch : t) {
+      --counts[ch - 'a'];
     }
 
-    for (int count : counts) {
+    for (const int count : counts) {
       if (count != 0) {
         return false;
       }

@@ -13,26 +13,30 @@ public:
     int value = 1;
 
     while (top <= bottom && left <= right) {
-      for (int column = left; column <= right; ++column) {
-        matrix[top][column] = value++;
+      // 从左到右填写上边。
+      for (int i = left; i <= right; ++i) {
+        matrix[top][i] = value++;
       }
       ++top;
 
-      for (int row = top; row <= bottom; ++row) {
-        matrix[row][right] = value++;
+      // 从上到下填写右边。
+      for (int i = top; i <= bottom; ++i) {
+        matrix[i][right] = value++;
       }
       --right;
 
       if (top <= bottom) {
-        for (int column = right; column >= left; --column) {
-          matrix[bottom][column] = value++;
+        // 从右到左填写下边。
+        for (int i = right; i >= left; --i) {
+          matrix[bottom][i] = value++;
         }
         --bottom;
       }
 
       if (left <= right) {
-        for (int row = bottom; row >= top; --row) {
-          matrix[row][left] = value++;
+        // 从下到上填写左边。
+        for (int i = bottom; i >= top; --i) {
+          matrix[i][left] = value++;
         }
         ++left;
       }
