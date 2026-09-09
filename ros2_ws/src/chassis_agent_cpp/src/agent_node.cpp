@@ -6,8 +6,10 @@
  *   sub /task_plan    →  brain=auto 时按 recommended_brain 切换
  */
 
+#include <cmath>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 
 #include <embodied_msgs/msg/embodied_command.hpp>
@@ -40,13 +42,21 @@ namespace {
 constexpr double kControlPeriodSec = 0.02;
 constexpr double kDefaultStandoff = 0.35;
 constexpr double kDefaultArriveDist = 0.3;
+constexpr double kDefaultPushMinDist = 0.20;
 
 embodied_core::RuleBrain::Config rule_brain_config_from_node(rclcpp::Node &node) {
   embodied_core::RuleBrain::Config cfg;
   cfg.standoff = node.get_parameter("standoff").as_double();
   cfg.arrive_dist = node.get_parameter("arrive_dist").as_double();
+  const double push_min_dist =
+      node.get_parameter("push_min_dist").as_double();
+  if (!std::isfinite(push_min_dist) || push_min_dist <= 0.0) {
+    throw std::invalid_argument(
+        "push_min_dist must be finite and greater than 0");
+  }
   cfg.fsm.standoff = cfg.standoff;
   cfg.fsm.arrive_dist = cfg.arrive_dist;
+  cfg.fsm.push_min_dist = push_min_dist;
   return cfg;
 }
 
@@ -123,6 +133,7 @@ class AgentNode : public rclcpp::Node {
     declare_parameter("task", "nav_to_box_red");
     declare_parameter("standoff", kDefaultStandoff);
     declare_parameter("arrive_dist", kDefaultArriveDist);
+    declare_parameter("push_min_dist", kDefaultPushMinDist);
     declare_parameter("listen_task_plan", true);
     declare_parameter("auto_push_brain", "rule");
 
@@ -178,7 +189,8 @@ class AgentNode : public rclcpp::Node {
     if (brain_type == "rule") {
       RCLCPP_INFO(
           get_logger(),
-          "  任务: NAV → REACH → 夹爪 → 倒车推箱（≥ 0.2 m）");
+          "  任务: NAV → REACH → 夹爪 → 倒车推箱（≥ %.2f m）",
+          rule_cfg_.fsm.push_min_dist);
       RCLCPP_INFO(
           get_logger(),
           "  standoff=%.2f m  arrive_dist=%.2f m",
