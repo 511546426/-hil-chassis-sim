@@ -35,6 +35,11 @@ target_compile_features(agent_node PUBLIC cxx_std_17)
 
 install(TARGETS agent_node DESTINATION lib/${PROJECT_NAME})
 
+install(
+  DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_goal_from_msg test/test_goal_from_msg.cpp)
