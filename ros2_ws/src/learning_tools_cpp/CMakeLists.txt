@@ -25,9 +25,17 @@ target_link_libraries(cmd_monitor_node
 )
 target_compile_features(cmd_monitor_node PUBLIC cxx_std_17)
 
+add_executable(reset_client_node src/reset_client_node.cpp)
+target_link_libraries(reset_client_node
+  rclcpp::rclcpp
+  embodied_msgs::embodied_msgs__rosidl_typesupport_cpp
+)
+target_compile_features(reset_client_node PUBLIC cxx_std_17)
+
 install(TARGETS
   topic_logger_node
   cmd_monitor_node
+  reset_client_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
