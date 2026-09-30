@@ -30,43 +30,69 @@ public:
     request->base_y = 0.0;
     request->base_yaw = 0.0;
 
-    auto future = client_->async_send_request(request);
-    const auto result = rclcpp::spin_until_future_complete(
-        get_node_base_interface(), future, 3s);
+    // 回调式异步请求不主动等待 Future，用定时器处理超时。
+    timeout_timer_ = create_wall_timer(3s, [this]() {
+      if (response_received_) {
+        return;
+      }
 
-    if (result != rclcpp::FutureReturnCode::SUCCESS) {
       RCLCPP_ERROR(
           get_logger(),
           "reset service request timed out or failed");
-      return false;
-    }
+      exit_code_ = 1;
+      rclcpp::shutdown();
+    });
 
-    const auto response = future.get();
-    if (!response->success) {
-      RCLCPP_ERROR(
-          get_logger(),
-          "reset failed: %s",
-          response->message.c_str());
-      return false;
-    }
+    client_->async_send_request(
+        request,
+        [this](rclcpp::Client<ResetEpisode>::SharedFuture future) {
+          response_received_ = true;
+          timeout_timer_->cancel();
 
-    RCLCPP_INFO(
-        get_logger(),
-        "reset succeeded: %s",
-        response->message.c_str());
+          const auto response = future.get();
+          if (!response->success) {
+            RCLCPP_ERROR(
+                get_logger(),
+                "reset failed: %s",
+                response->message.c_str());
+            exit_code_ = 1;
+          } else {
+            RCLCPP_INFO(
+                get_logger(),
+                "reset succeeded: %s",
+                response->message.c_str());
+            exit_code_ = 0;
+          }
+
+          // 处理完一次性请求后退出 spin。
+          rclcpp::shutdown();
+        });
+
     return true;
+  }
+
+  int exit_code() const {
+    return exit_code_;
   }
 
 private:
   rclcpp::Client<ResetEpisode>::SharedPtr client_;
+  rclcpp::TimerBase::SharedPtr timeout_timer_;
+  bool response_received_{false};
+  int exit_code_{1};
 };
 
 int main(int argc, char* argv[]) {
   rclcpp::init(argc, argv);
 
   const auto node = std::make_shared<ResetClientNode>();
-  const bool success = node->reset();
+  if (!node->reset()) {
+    rclcpp::shutdown();
+    return 1;
+  }
 
+  // Executor 驱动 Response 回调和超时定时器。
+  rclcpp::spin(node);
   rclcpp::shutdown();
-  return success ? 0 : 1;
+  return node->exit_code();
 }
