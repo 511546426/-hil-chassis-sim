@@ -8,8 +8,10 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(embodied_msgs REQUIRED)
+find_package(example_interfaces REQUIRED)
 
 add_executable(topic_logger_node src/topic_logger_node.cpp)
 target_link_libraries(topic_logger_node
@@ -32,10 +34,28 @@ target_link_libraries(reset_client_node
 )
 target_compile_features(reset_client_node PUBLIC cxx_std_17)
 
+add_executable(fibonacci_action_server src/fibonacci_action_server.cpp)
+target_link_libraries(fibonacci_action_server
+  rclcpp::rclcpp
+  rclcpp_action::rclcpp_action
+  example_interfaces::example_interfaces__rosidl_typesupport_cpp
+)
+target_compile_features(fibonacci_action_server PUBLIC cxx_std_17)
+
+add_executable(fibonacci_action_client src/fibonacci_action_client.cpp)
+target_link_libraries(fibonacci_action_client
+  rclcpp::rclcpp
+  rclcpp_action::rclcpp_action
+  example_interfaces::example_interfaces__rosidl_typesupport_cpp
+)
+target_compile_features(fibonacci_action_client PUBLIC cxx_std_17)
+
 install(TARGETS
   topic_logger_node
   cmd_monitor_node
   reset_client_node
+  fibonacci_action_server
+  fibonacci_action_client
   DESTINATION lib/${PROJECT_NAME}
 )
 
